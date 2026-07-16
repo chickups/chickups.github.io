@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#CFEBFB">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Chick Up!</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #E9E1D2;
+    overscroll-behavior: none;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: none;
+  }
+  #stage {
+    position: absolute; top: 0; left: 0;
+    width: 393px;
+    transform-origin: top left;
+    transform: scale(var(--s, 1));
+    overflow: hidden;
+  }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
