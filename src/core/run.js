@@ -1,10 +1,22 @@
 // @ts-check
-import { PHYSICS, SCORING, CAMERA, PROPS } from './tokens.js';
+import { PHYSICS, SCORING, CAMERA, PROPS, ZONES, HAZARD } from './tokens.js';
 import { orbitPosition, stepOrbit, launchVelocity, stepFly, findGrab } from './physics.js';
+import { truckX } from './zones.js';
 
 /** @typedef {import('./field.js').Field} Field */
 /** @typedef {import('./field.js').Prop} Prop */
 /** @typedef {import('./field.js').Pad} Pad */
+/** @typedef {import('./zones.js').Zones} Zones */
+/** @typedef {import('./zones.js').Updraft} Updraft */
+/** @typedef {import('./zones.js').Truck} Truck */
+
+/**
+ * A no-op zones stream, used when `step` is called without one (call sites
+ * that haven't been wired up to `makeZones` yet keep working, just without
+ * updrafts or trucks).
+ * @type {Zones}
+ */
+const EMPTY_ZONES = { updraftsInRange: () => [], trucksInRange: () => [] };
 
 /**
  * Orbit radius for a prop kind. Gears are bigger than tires; pads have no
@@ -53,6 +65,10 @@ export function rateOf(kind) {
  * @property {boolean} wasPressed  previous frame's input, for tap edge detection
  * @property {boolean} everLaunched
  * @property {boolean} everGrabbed
+ * @property {number} t            seconds since the run began; accumulated from `dt`,
+ *                                 never read from a clock. Feeds `truckX`.
+ * @property {'fall'|'truck'} deathBy  cause of death; meaningless (but always a real
+ *                                 value) before `phase` is `'dead'`.
  */
 
 /**
@@ -84,6 +100,10 @@ export function createRun(field, viewportH) {
     wasPressed: false,
     everLaunched: false,
     everGrabbed: false,
+    t: 0,
+    // 'fall' is the sensible default: it is slice-1's sole failure mode, and
+    // this field is meaningless anyway until phase is 'dead'.
+    deathBy: 'fall',
   };
 }
 
@@ -100,12 +120,14 @@ export function createRun(field, viewportH) {
  * @param {number} dt seconds
  * @param {boolean} pressed raw input: is the button down this frame?
  * @param {number} viewportH points
+ * @param {Zones} [zones] updraft/truck streams; omit for a plain run with neither
  * @returns {RunState}
  */
-export function step(state, field, dt, pressed, viewportH) {
+export function step(state, field, dt, pressed, viewportH, zones = EMPTY_ZONES) {
   if (state.phase === 'dead') return state;
 
   const s = { ...state };
+  s.t = state.t + dt;
   const tapped = pressed && !s.wasPressed;
 
   if (s.phase === 'orbit') {
@@ -139,6 +161,21 @@ export function step(state, field, dt, pressed, viewportH) {
     s.y = f.y;
     s.vx = f.vx;
     s.vy = f.vy;
+
+    // Updraft zones: a column of rising air, not a spine prop — no attach,
+    // no chain/mult/feathers. While Peep's centre sits inside the rect, add
+    // lift on top of the gravity `stepFly` already applied, clamped to
+    // updraftMaxV. Leaving the rect (checked fresh every frame, nothing
+    // latched) returns him to plain freefall immediately, per doc §13.
+    const zoneBand = ZONES.updraftH / 2 + ZONES.updraftW / 2;
+    const inUpdraft = zones
+      .updraftsInRange(s.y - zoneBand, s.y + zoneBand)
+      .some(
+        (u) => Math.abs(s.x - u.x) <= u.w / 2 && Math.abs(s.y - u.y) <= u.h / 2,
+      );
+    if (inUpdraft) {
+      s.vy = Math.min(ZONES.updraftMaxV, s.vy + ZONES.updraftLift * dt);
+    }
 
     // Falling below the wheel you last left breaks the chain: the multiplier
     // measures sustained upward progress, not grabs in total.
@@ -215,7 +252,35 @@ export function step(state, field, dt, pressed, viewportH) {
   if (s.y > s.maxY) s.maxY = s.y;
   const desiredCamera = s.maxY - viewportH * CAMERA.peepAnchor;
   if (desiredCamera > s.cameraY) s.cameraY = desiredCamera;
-  if (s.y < s.cameraY) s.phase = 'dead';
+  if (s.phase !== 'dead' && s.y < s.cameraY) {
+    s.phase = 'dead';
+    s.deathBy = 'fall';
+  }
+
+  // Truck contact: the second failure condition. A rect-vs-circle test —
+  // Peep's hitbox (`peepHitR`) is deliberately smaller than his art, so
+  // near-misses read as near. Checked in every phase (orbit or fly): a truck
+  // can clip Peep off a wheel just as easily as out of the air. `truckX` is
+  // the pure function of `(truck, s.t)`, never integrated, so this is exactly
+  // reproducible from the run clock alone (the point of the whole exercise —
+  // a future ghost replay).
+  if (s.phase !== 'dead') {
+    const trucks = zones.trucksInRange(s.y - HAZARD.truckH, s.y + HAZARD.truckH);
+    for (const truck of trucks) {
+      const tx = truckX(truck, s.t);
+      const halfW = HAZARD.truckW / 2;
+      const halfH = HAZARD.truckH / 2;
+      const cx = Math.max(tx - halfW, Math.min(s.x, tx + halfW));
+      const cy = Math.max(truck.y - halfH, Math.min(s.y, truck.y + halfH));
+      const dx = s.x - cx;
+      const dy = s.y - cy;
+      if (dx * dx + dy * dy <= HAZARD.peepHitR * HAZARD.peepHitR) {
+        s.phase = 'dead';
+        s.deathBy = 'truck';
+        break;
+      }
+    }
+  }
 
   s.wasPressed = pressed;
   return s;

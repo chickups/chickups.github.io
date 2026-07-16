@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRun, step, scoreOf, radiusOf, rateOf } from './run.js';
 import { makeField } from './field.js';
-import { PHYSICS, SCORING, PROPS } from './tokens.js';
+import { PHYSICS, SCORING, PROPS, ZONES, HAZARD } from './tokens.js';
 
 const VH = 852;
 const DT = 1 / 60;
@@ -357,4 +357,152 @@ test('a gear launches with the opposite horizontal direction to a tire at the sa
     Math.sign(launched.vx) !== Math.sign(tireLaunched.vx),
     'a gear must launch horizontally opposite to a tire released at the same angle',
   );
+});
+
+// --- run clock (`t`) -----------------------------------------------------
+
+test('a fresh run starts at t=0, and t accumulates by dt every step', () => {
+  const f = makeField(1);
+  let s = createRun(f, VH);
+  assert.equal(s.t, 0);
+  s = step(s, f, DT, false, VH);
+  assert.ok(Math.abs(s.t - DT) < 1e-12, 't must advance by exactly dt');
+  s = run(s, f, 10, false); // 10 more frames, mix of orbit and (no) flight
+  assert.ok(Math.abs(s.t - 11 * DT) < 1e-9, 't must keep accumulating regardless of phase');
+});
+
+test('t stops advancing once dead, like everything else', () => {
+  const f = makeField(1);
+  let s = createRun(f, VH);
+  s = { ...s, phase: 'fly', x: 0, vx: 0, vy: -2000, lockWheel: -1 };
+  s = run(s, f, 600, false);
+  assert.equal(s.phase, 'dead');
+  const tAtDeath = s.t;
+  s = step(s, f, DT, true, VH);
+  assert.equal(s.t, tAtDeath, 'a dead run must not keep ticking its own clock');
+});
+
+// --- deathBy ---------------------------------------------------------------
+
+test('a fresh run has a sensible deathBy default', () => {
+  const f = makeField(1);
+  const s = createRun(f, VH);
+  assert.ok(s.deathBy === 'fall' || s.deathBy === 'truck', 'deathBy must be one of the two known causes even before death');
+});
+
+test('falling below the camera sets deathBy to fall', () => {
+  const f = makeField(1);
+  let s = createRun(f, VH);
+  s = { ...s, phase: 'fly', x: 0, vx: 0, vy: -2000, lockWheel: -1 };
+  s = run(s, f, 600, false);
+  assert.equal(s.phase, 'dead');
+  assert.equal(s.deathBy, 'fall');
+});
+
+// --- updraft zones -----------------------------------------------------
+
+test('inside an updraft, vy rises against gravity beyond what freefall alone would give', () => {
+  const f = makeField(1);
+  // Deliberately oversized so the test isn't sensitive to Peep's exact position.
+  const updraft = { x: 0, y: 0, w: 5000, h: 5000 };
+  const zones = { updraftsInRange: () => [updraft], trucksInRange: () => [] };
+  let s = createRun(f, VH);
+  // x:0 keeps Peep clear of every spine column, same trick other flight tests use.
+  s = { ...s, phase: 'fly', x: 0, y: 0, vx: 0, vy: 0, lockWheel: -1 };
+  const freefallVy = 0 - PHYSICS.gravity * DT;
+  s = step(s, f, DT, false, VH, zones);
+  assert.ok(s.vy > freefallVy, 'an updraft must push vy above plain freefall');
+  assert.ok(s.vy > 0, 'updraftLift exceeds gravity, so net vy must actually be upward');
+});
+
+test('vy inside an updraft clamps to updraftMaxV and never exceeds it', () => {
+  const f = makeField(1);
+  // Tall enough that 200 frames of climbing at up to updraftMaxV cannot possibly
+  // clear the top of the rect (200 * DT * updraftMaxV is far under half of h).
+  const updraft = { x: 0, y: 0, w: 5000, h: 1e6 };
+  const zones = { updraftsInRange: () => [updraft], trucksInRange: () => [] };
+  let s = createRun(f, VH);
+  s = { ...s, phase: 'fly', x: 0, y: 0, vx: 0, vy: 0, lockWheel: -1 };
+  for (let i = 0; i < 200; i++) {
+    s = step(s, f, DT, false, VH, zones);
+    assert.ok(s.vy <= ZONES.updraftMaxV + 1e-9, `vy exceeded updraftMaxV at frame ${i}: ${s.vy}`);
+  }
+  assert.ok(s.vy > ZONES.updraftMaxV - 1, 'sanity: the clamp should actually have been reached, not just never violated');
+});
+
+test('leaving the updraft rect drops Peep back to plain freefall immediately', () => {
+  const f = makeField(1);
+  const updraft = { x: 0, y: 0, w: 200, h: 200 }; // y in [-100, 100]
+  const zones = { updraftsInRange: () => [updraft], trucksInRange: () => [] };
+  let s = createRun(f, VH);
+  // Clearly outside the rect already (y=500 vs the rect's y<=100 extent).
+  s = { ...s, phase: 'fly', x: 0, y: 500, vx: 0, vy: 50, lockWheel: -1 };
+  const before = s.vy;
+  s = step(s, f, DT, false, VH, zones);
+  assert.ok(Math.abs(s.vy - (before - PHYSICS.gravity * DT)) < 1e-9, 'outside the rect only gravity may act on vy');
+});
+
+test('an updraft never attaches, and never touches chain/mult/feathers', () => {
+  const f = makeField(1);
+  const updraft = { x: 0, y: 1000, w: 5000, h: 5000 };
+  const zones = { updraftsInRange: () => [updraft], trucksInRange: () => [] };
+  let s = createRun(f, VH);
+  // y well above lastWheelY (0, inherited from createRun): a single frame's
+  // semi-implicit-Euler dip (gravity applied before the lift) must not read
+  // as falling below the last wheel when starting this far clear of it.
+  s = { ...s, phase: 'fly', chain: 4, mult: 2, feathers: 9, x: 0, y: 1000, vx: 0, vy: 0, lockWheel: -1 };
+  s = step(s, f, DT, false, VH, zones);
+  assert.equal(s.phase, 'fly', 'an updraft must never attach');
+  assert.equal(s.chain, 4);
+  assert.equal(s.mult, 2);
+  assert.equal(s.feathers, 9);
+});
+
+// --- trucks: the second failure condition -----------------------------------
+
+test('a truck overlapping Peep kills, sets deathBy to truck, and then stays inert', () => {
+  const f = makeField(1);
+  const truck = { y: 500, dir: /** @type {1} */ (1), speed: 0, phase: 200 };
+  const zones = { updraftsInRange: () => [], trucksInRange: () => [truck] };
+  let s = createRun(f, VH);
+  s = { ...s, phase: 'fly', x: 200, y: 500, vx: 0, vy: 0, lockWheel: -1 };
+  s = step(s, f, DT, false, VH, zones);
+  assert.equal(s.phase, 'dead');
+  assert.equal(s.deathBy, 'truck');
+
+  const frozen = step(s, f, DT, true, VH, zones);
+  assert.deepEqual(frozen, s, 'a run killed by a truck must stay inert too');
+});
+
+test('a truck clearly clear of Peep does not kill', () => {
+  const f = makeField(1);
+  const truck = { y: 500, dir: /** @type {1} */ (1), speed: 0, phase: 200 };
+  const zones = { updraftsInRange: () => [], trucksInRange: () => [truck] };
+  let s = createRun(f, VH);
+  const clearX = 200 + HAZARD.truckW / 2 + HAZARD.peepHitR + 50;
+  s = { ...s, phase: 'fly', x: clearX, y: 500, vx: 0, vy: 0, lockWheel: -1 };
+  s = step(s, f, DT, false, VH, zones);
+  assert.notEqual(s.phase, 'dead');
+  assert.notEqual(s.deathBy, 'truck');
+});
+
+test('a truck one pixel clear of Peep hitbox does not kill (edge precision)', () => {
+  const f = makeField(1);
+  const truck = { y: 0, dir: /** @type {1} */ (1), speed: 0, phase: 200 };
+  const zones = { updraftsInRange: () => [], trucksInRange: () => [truck] };
+  let s = createRun(f, VH);
+  // Just past the combined half-width + hitbox radius, straight out to the side.
+  const edgeX = truck.phase + HAZARD.truckW / 2 + HAZARD.peepHitR + 1;
+  s = { ...s, phase: 'fly', x: edgeX, y: truck.y, vx: 0, vy: 0, lockWheel: -1 };
+  s = step(s, f, DT, false, VH, zones);
+  assert.notEqual(s.phase, 'dead');
+});
+
+test('without a zones argument, step behaves exactly as before (no trucks/updrafts)', () => {
+  const f = makeField(1);
+  let s = createRun(f, VH);
+  s = { ...s, phase: 'fly', x: 0, y: 0, vx: 0, vy: 0, lockWheel: -1 };
+  const withoutZones = step(s, f, DT, false, VH);
+  assert.equal(withoutZones.phase, 'fly');
+  assert.ok(Math.abs(withoutZones.vy - (0 - PHYSICS.gravity * DT)) < 1e-9);
 });
