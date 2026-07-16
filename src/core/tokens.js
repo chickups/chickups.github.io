@@ -113,4 +113,12 @@ export const PROPS = Object.freeze({
   gearRateScale: -1.0,
   /** Gears are bigger, so they launch faster: v = rate*radius. */
   gearRadiusScale: 1.25,
+  /**
+   * pt, +/-. Pads are NOT spine props (see biome.js `padChance`) — a pad sits in
+   * the gap between spine props `i` and `i+1`, at roughly the midpoint, jittered
+   * by these two so it reads as "on the way" rather than snapped to a grid.
+   */
+  padYJitter: 20,
+  /** pt, +/-. Jitter around the midpoint x of the pad's two neighbouring props. */
+  padXJitter: 30,
 });

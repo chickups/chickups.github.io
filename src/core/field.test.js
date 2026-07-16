@@ -127,25 +127,11 @@ test('same seed twice gives identical kind sequences', () => {
   }
 });
 
-test('a pad is never followed by another pad, across all biomes', () => {
-  for (const seed of [1, 2, 3, 4242, 77, 555, 123]) {
-    const f = makeField(seed);
-    for (let i = 1; i < 400; i++) {
-      const prev = f.propAt(i - 1);
-      const cur = f.propAt(i);
-      assert.ok(
-        !(prev.kind === 'pad' && cur.kind === 'pad'),
-        `seed ${seed}: props ${i - 1} and ${i} are both pads`,
-      );
-    }
-  }
-});
-
-test('the pad invariant does not disturb the x-jitter draw sequence', () => {
-  // Reimplement the x-jitter draw in lockstep with a fresh RNG on the same
-  // seed: draw order is always x-jitter then kind, one of each per index,
-  // regardless of whether the kind gets forced afterward. Prop N's x must
-  // therefore still be exactly the (2N)-th raw draw.
+test('the x-jitter draw sequence is exactly the (2N)-th raw draw of makeRng(seed)', () => {
+  // Draw order is always x-jitter then kind, one of each per index, always.
+  // Prop N's x must therefore be exactly the (2N)-th raw draw. This is
+  // load-bearing: the pad stream (its own, separately-seeded RNG) must never
+  // be able to disturb this sequence.
   const seed = 4242;
   const rng = makeRng(seed);
   const f = makeField(seed);
@@ -155,5 +141,76 @@ test('the pad invariant does not disturb the x-jitter draw sequence', () => {
     rng(); // kind draw, consumed but not reimplemented here
     const expectedX = col + (dx * 2 - 1) * FIELD.jitter;
     assert.equal(f.propAt(i).x, expectedX, `prop ${i} x diverged from raw draw sequence`);
+  }
+});
+
+test('consecutive spine props are never more than FIELD.gapMax apart', () => {
+  // This is the invariant that makes the game winnable: every attachable prop's
+  // distance to the next attachable prop must stay under the max rise (247pt at
+  // current tuning), and gapMax (200pt) is the guardrail for that. If pads (or
+  // anything else) ever get added back onto the spine, or gapMax is loosened,
+  // this must fail loudly rather than let an unreachable gap slip in silently.
+  for (const seed of [1, 2, 3, 4242, 77, 555, 123, 7]) {
+    const f = makeField(seed);
+    for (let i = 1; i < 500; i++) {
+      const gap = f.propAt(i).y - f.propAt(i - 1).y;
+      assert.ok(
+        gap <= FIELD.gapMax + 1e-9,
+        `seed ${seed}: gap between spine props ${i - 1} and ${i} was ${gap}, exceeding gapMax ${FIELD.gapMax}`,
+      );
+    }
+  }
+});
+
+// --- pads (their own stream, off the spine) --------------------------------
+
+test('pads only ever appear where their gap biome allows a nonzero padChance', () => {
+  for (const seed of [1, 2, 3, 4242, 77]) {
+    const f = makeField(seed);
+    const pads = f.padsInRange(-1, 1e7);
+    assert.ok(pads.length > 0, `seed ${seed}: expected at least one pad across such a wide range`);
+    for (const { index, pad } of pads) {
+      const gapStartProp = f.propAt(index);
+      const biome = biomeAt(gapStartProp.y / SCORING.pointsPerMetre);
+      assert.ok(biome.padChance > 0, `pad ${index} appeared in biome ${biome.key}, which has padChance 0`);
+      assert.ok(pad.y > gapStartProp.y, `pad ${index} y must sit above its gap's starting prop`);
+    }
+  }
+});
+
+test('same seed twice gives identical pad streams', () => {
+  const a = makeField(999);
+  const b = makeField(999);
+  for (let i = 0; i < 200; i++) {
+    assert.deepEqual(a.padAt(i), b.padAt(i), `pad ${i} diverged`);
+  }
+});
+
+test('padsInRange is access-order independent, exactly like propsInRange', () => {
+  const jumped = makeField(88);
+  jumped.padAt(40);
+  const jumpedPads = [];
+  for (let i = 0; i <= 40; i++) jumpedPads.push(jumped.padAt(i));
+
+  const sequential = makeField(88);
+  const sequentialPads = [];
+  for (let i = 0; i <= 40; i++) sequentialPads.push(sequential.padAt(i));
+
+  assert.deepEqual(jumpedPads, sequentialPads);
+});
+
+test('the pad stream does not disturb the spine draw sequence', () => {
+  // Reading pads first (which forces the spine to materialise ahead, since
+  // padAt(i) reads propAt(i) and propAt(i+1)) must not change a single spine
+  // x value versus reading the spine cold. Same load-bearing check as above,
+  // just via the pad stream's back door into the spine.
+  const seed = 321;
+  const withPadReads = makeField(seed);
+  for (let i = 0; i < 100; i++) withPadReads.padAt(i);
+
+  const spineOnly = makeField(seed);
+
+  for (let i = 0; i < 100; i++) {
+    assert.deepEqual(withPadReads.propAt(i), spineOnly.propAt(i), `spine prop ${i} diverged after pad reads`);
   }
 });

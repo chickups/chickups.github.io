@@ -24,11 +24,25 @@ test('biomeIndexAt agrees with biomeAt', () => {
   }
 });
 
-test('every biome only names kinds the field can build', () => {
+test('kinds is attachable-only — every biome only names tire/gear, never pad', () => {
+  // Pads are not a spine kind: they are a separate stream (field.js
+  // padsInRange), spawned in the gap between spine props at `padChance`. A pad
+  // occupying a spine index would make it a mandatory, fatal-to-miss rung,
+  // which is the opposite of the design (doc §13: "no penalty, just lost
+  // height"). See the slice-2 task-2b writeup for the reachability math.
   for (const b of BIOMES) {
     for (const k of Object.keys(b.kinds)) {
-      assert.ok(['tire', 'gear', 'pad'].includes(k), `${b.key} names unknown kind ${k}`);
+      assert.ok(['tire', 'gear'].includes(k), `${b.key} names non-attachable kind ${k}`);
     }
     assert.ok(Object.values(b.kinds).some((w) => w > 0), `${b.key} must allow some kind`);
+  }
+});
+
+test('padChance is a probability, 0..1, for every biome', () => {
+  for (const b of BIOMES) {
+    assert.ok(
+      typeof b.padChance === 'number' && b.padChance >= 0 && b.padChance <= 1,
+      `${b.key} padChance ${b.padChance} is not a valid probability`,
+    );
   }
 });

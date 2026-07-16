@@ -4,6 +4,7 @@ import { orbitPosition, stepOrbit, launchVelocity, stepFly, findGrab } from './p
 
 /** @typedef {import('./field.js').Field} Field */
 /** @typedef {import('./field.js').Prop} Prop */
+/** @typedef {import('./field.js').Pad} Pad */
 
 /**
  * Orbit radius for a prop kind. Gears are bigger than tires; pads have no
@@ -44,7 +45,11 @@ export function rateOf(kind) {
  * @property {number} mult         current multiplier, 1..SCORING.multMax
  * @property {number} feathers     banked this run
  * @property {number} lastWheelY   y of the wheel last launched from; chain-break threshold
- * @property {number} lockWheel    wheel index that cannot be re-grabbed yet, or -1
+ * @property {number} lockWheel    spine prop index that cannot be re-grabbed yet, or -1
+ * @property {number} lockPad      pad-stream index that cannot re-fire yet, or -1. Pads have
+ *                                 their own index space (gap index, not spine index), so this
+ *                                 must NOT share a field with `lockWheel` — a pad index and a
+ *                                 spine index can collide numerically and lock the wrong prop.
  * @property {boolean} wasPressed  previous frame's input, for tap edge detection
  * @property {boolean} everLaunched
  * @property {boolean} everGrabbed
@@ -75,6 +80,7 @@ export function createRun(field, viewportH) {
     feathers: 0,
     lastWheelY: wheel.y,
     lockWheel: -1,
+    lockPad: -1,
     wasPressed: false,
     everLaunched: false,
     everGrabbed: false,
@@ -142,43 +148,47 @@ export function step(state, field, dt, pressed, viewportH) {
     }
 
     // Release the re-grab lock once Peep is clear of the locked prop's own
-    // contact band — a pad's is a plain disc (PROPS.padRadius); an orbitable
-    // prop's is its own radius plus the grab tolerance.
+    // contact band. Wheel and pad locks live in separate index spaces (a pad
+    // index and a spine index can collide numerically) and so are tracked and
+    // released independently.
     if (s.lockWheel >= 0) {
       const lw = field.propAt(s.lockWheel);
-      const lockBand = lw.kind === 'pad' ? PROPS.padRadius : radiusOf(lw.kind) + PHYSICS.grabTolerance;
+      const lockBand = radiusOf(lw.kind) + PHYSICS.grabTolerance;
       if (Math.hypot(s.x - lw.x, s.y - lw.y) > lockBand) s.lockWheel = -1;
+    }
+    if (s.lockPad >= 0) {
+      const lp = field.padAt(s.lockPad);
+      if (!lp || Math.hypot(s.x - lp.x, s.y - lp.y) > PROPS.padRadius) s.lockPad = -1;
     }
 
     // Pads are touched, not grabbed: a simple distance check against a disc,
     // scanned separately from findGrab because their contact test differs
-    // entirely from the orbitable annulus test below.
+    // entirely from the orbitable annulus test below. Pads are their own
+    // deterministic stream (field.padsInRange), never a spine prop.
     const padHit = field
-      .propsInRange(s.y - PROPS.padRadius, s.y + PROPS.padRadius)
+      .padsInRange(s.y - PROPS.padRadius, s.y + PROPS.padRadius)
       .find(
         (e) =>
-          e.prop.kind === 'pad' &&
-          e.index !== s.lockWheel &&
-          Math.hypot(s.x - e.prop.x, s.y - e.prop.y) <= PROPS.padRadius,
+          e.index !== s.lockPad &&
+          Math.hypot(s.x - e.pad.x, s.y - e.pad.y) <= PROPS.padRadius,
       );
 
     if (padHit) {
       // No tap, no attach: a pad bypasses the hold-release verb entirely.
-      // vx is untouched, so it grants no steering — the pad-invariant in
-      // field.js guarantees the very next prop is attachable.
+      // vx is untouched, so it grants no steering.
       s.vy = PROPS.padBounce;
-      s.lastWheelY = padHit.prop.y;
-      s.lockWheel = padHit.index;
+      s.lastWheelY = padHit.pad.y;
+      s.lockPad = padHit.index;
     } else {
       // Touching an orbitable prop's band attaches automatically — the player
       // times the launch, never the catch. Each candidate carries its own
-      // radius (a gear's differs from a tire's), and pads are filtered out
-      // entirely — a pad must never be grabbable.
+      // radius (a gear's differs from a tire's). The spine only ever contains
+      // tire/gear now, so no kind filter is needed here.
       const maxRadius = Math.max(radiusOf('tire'), radiusOf('gear'));
       const band = maxRadius + PHYSICS.grabTolerance;
       const entries = field
         .propsInRange(s.y - band, s.y + band)
-        .filter((e) => e.index !== s.lockWheel && e.prop.kind !== 'pad')
+        .filter((e) => e.index !== s.lockWheel)
         .map((e) => ({ index: e.index, wheel: e.prop, radius: radiusOf(e.prop.kind) }));
       const hit = findGrab({ x: s.x, y: s.y }, entries, PHYSICS.grabTolerance);
       if (hit) {

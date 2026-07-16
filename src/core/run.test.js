@@ -81,13 +81,12 @@ test('landing while still holding does not immediately re-launch', () => {
 
 test('multiplier steps every chainPerMult grabs and caps at multMax', () => {
   const f = makeField(1);
-  // Pads aren't grabbable (Task 2), so gather attachable (tire/gear) props to
-  // exercise 20 consecutive grabs; the test is about chain/mult bookkeeping,
+  // The spine is attachable-only (tire/gear); gather 20 consecutive props to
+  // exercise 20 consecutive grabs. The test is about chain/mult bookkeeping,
   // not any particular field layout.
   const attachable = [];
   for (let i = 1; attachable.length < 20; i++) {
-    const p = f.propAt(i);
-    if (p.kind !== 'pad') attachable.push(p);
+    attachable.push(f.propAt(i));
   }
   let s = createRun(f, VH);
   let feathers = 0;
@@ -214,12 +213,19 @@ function findKind(field, kind, from = 0) {
   }
 }
 
+/** Find the first pad-stream index (and its pad) at or after `from`. */
+function findPad(field, from = 0) {
+  for (let i = from; ; i++) {
+    const pad = field.padAt(i);
+    if (pad) return { index: i, pad };
+  }
+}
+
 test('a pad bounce sets vy up, preserves vx, and leaves phase fly with no input', () => {
   const f = makeField(1);
-  const padIdx = findKind(f, 'pad');
-  const pad = f.propAt(padIdx);
+  const { pad } = findPad(f);
   let s = createRun(f, VH);
-  s = { ...s, phase: 'fly', x: pad.x, y: pad.y, vx: 37, vy: -5, lockWheel: -1, wasPressed: false };
+  s = { ...s, phase: 'fly', x: pad.x, y: pad.y, vx: 37, vy: -5, lockWheel: -1, lockPad: -1, wasPressed: false };
   s = step(s, f, DT, false, VH);
   assert.equal(s.phase, 'fly', 'a pad bounce must not attach');
   assert.equal(s.vy, PROPS.padBounce);
@@ -229,24 +235,35 @@ test('a pad bounce sets vy up, preserves vx, and leaves phase fly with no input'
 
 test('a pad does not increment chain, mult, or feathers', () => {
   const f = makeField(1);
-  const padIdx = findKind(f, 'pad');
-  const pad = f.propAt(padIdx);
+  const { pad } = findPad(f);
   let s = createRun(f, VH);
-  s = { ...s, phase: 'fly', chain: 4, mult: 2, feathers: 9, x: pad.x, y: pad.y, vx: 0, vy: 0, lockWheel: -1, wasPressed: false };
+  s = {
+    ...s,
+    phase: 'fly',
+    chain: 4,
+    mult: 2,
+    feathers: 9,
+    x: pad.x,
+    y: pad.y,
+    vx: 0,
+    vy: 0,
+    lockWheel: -1,
+    lockPad: -1,
+    wasPressed: false,
+  };
   s = step(s, f, DT, false, VH);
   assert.equal(s.chain, 4, 'a pad must not build the chain');
   assert.equal(s.mult, 2, 'a pad must not build the multiplier');
   assert.equal(s.feathers, 9, 'a pad grants no feathers');
 });
 
-test('a pad in lockWheel does not re-fire every frame while still in contact', () => {
+test('a pad in lockPad does not re-fire every frame while still in contact', () => {
   const f = makeField(1);
-  const padIdx = findKind(f, 'pad');
-  const pad = f.propAt(padIdx);
+  const { index: padIdx, pad } = findPad(f);
   let s = createRun(f, VH);
-  s = { ...s, phase: 'fly', x: pad.x, y: pad.y, vx: 0, vy: -5, lockWheel: -1, wasPressed: false };
+  s = { ...s, phase: 'fly', x: pad.x, y: pad.y, vx: 0, vy: -5, lockWheel: -1, lockPad: -1, wasPressed: false };
   s = step(s, f, DT, false, VH);
-  assert.equal(s.lockWheel, padIdx, 'the pad must lock itself out on bounce');
+  assert.equal(s.lockPad, padIdx, 'the pad must lock itself out on bounce');
   assert.equal(s.vy, PROPS.padBounce);
   // Still sitting inside the pad's radius next frame: must not bounce again.
   const vyAfterGravity = s.vy - PHYSICS.gravity * DT;
@@ -257,13 +274,46 @@ test('a pad in lockWheel does not re-fire every frame while still in contact', (
 
 test('a pad never appears in the grab candidate list — it is never grabbable', () => {
   const f = makeField(1);
-  const padIdx = findKind(f, 'pad');
-  const pad = f.propAt(padIdx);
+  const { pad } = findPad(f);
   let s = createRun(f, VH);
   // Sit exactly on the pad's would-be orbit annulus, at rest, as if trying to grab it.
-  s = { ...s, phase: 'fly', x: pad.x + PHYSICS.orbitRadius, y: pad.y, vx: 0, vy: 0, lockWheel: -1, wasPressed: false };
+  s = { ...s, phase: 'fly', x: pad.x + PHYSICS.orbitRadius, y: pad.y, vx: 0, vy: 0, lockWheel: -1, lockPad: -1, wasPressed: false };
   s = step(s, f, DT, false, VH);
   assert.notEqual(s.phase, 'orbit', 'a pad must never be grabbed like a tire');
+});
+
+test('bouncing a pad does not lock out a spine prop with the same numeric index', () => {
+  // The lock used to be a single `lockWheel` field keyed on spine indices. Pads
+  // now live in their own index space (gap index, not spine index), so a pad
+  // index and a spine index can collide numerically — e.g. pad 3 and spine prop
+  // 3 are unrelated props that happen to share the number 3. Without separate
+  // lock fields, bouncing on pad 3 would make spine prop 3 briefly ungrabbable.
+  const f = makeField(1);
+  const { index: padIdx, pad } = findPad(f);
+  const propAtSameIndex = f.propAt(padIdx);
+
+  let s = createRun(f, VH);
+  s = { ...s, phase: 'fly', x: pad.x, y: pad.y, vx: 0, vy: -5, lockWheel: -1, lockPad: -1, wasPressed: false };
+  s = step(s, f, DT, false, VH);
+  assert.equal(s.lockPad, padIdx, 'precondition: the pad locked itself out');
+  assert.equal(s.lockWheel, -1, 'a pad bounce must never touch the wheel lock');
+
+  // Now try to land on the spine prop that shares the pad's numeric index.
+  s = {
+    ...s,
+    phase: 'fly',
+    x: propAtSameIndex.x + radiusOf(propAtSameIndex.kind),
+    y: propAtSameIndex.y,
+    vx: 0,
+    vy: 0,
+  };
+  s = step(s, f, DT, false, VH);
+  assert.equal(
+    s.phase,
+    'orbit',
+    'a spine prop must stay grabbable even when its index numerically matches a locked pad',
+  );
+  assert.equal(s.wheelIndex, padIdx);
 });
 
 // --- gears --------------------------------------------------------------
