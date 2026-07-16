@@ -25,3 +25,11 @@ registerScreens(stage, {
 });
 
 go('splash');
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {
+      // A failed registration is not fatal — the game just will not run offline.
+    });
+  });
+}
