@@ -6,11 +6,15 @@ import { gear } from '../art/gear.js';
 import { pad } from '../art/pad.js';
 import { gamebg } from '../art/gamebg.js';
 import { makeHud } from '../hud.js';
+import { hazardTruck } from '../art/hazardTruck.js';
+import { updraft } from '../art/updraft.js';
 import { makeField } from '../../core/field.js';
+import { makeZones, truckX } from '../../core/zones.js';
+import { biomeIndexAt } from '../../core/biome.js';
 import { createRun, step, scoreOf, radiusOf } from '../../core/run.js';
-import { PHYSICS, SCORING, COLORS, PROPS } from '../../core/tokens.js';
+import { PHYSICS, SCORING, COLORS, PROPS, HAZARD } from '../../core/tokens.js';
 import { makeInput } from '../../input.js';
-import { getBest, setBest, addFeathers } from '../../storage.js';
+import { getBest, recordRun, getEquippedOutfit } from '../../storage.js';
 import { viewportPoints } from '../../viewport.js';
 import { tap, medium } from '../../haptics.js';
 
@@ -33,9 +37,14 @@ export function gameScreen(go) {
   // Seeding from the clock lives in render/, never in core/.
   const seed = (Date.now() >>> 0) || 1;
   const field = makeField(seed);
+  const zones = makeZones(seed);
   let state = createRun(field, vp.h);
 
   const best = getBest();
+  const outfit = getEquippedOutfit();
+  /** The run's peak chain, for the achievement stats. `state.chain` resets on a
+   *  drop, so the maximum has to be watched from outside the sim. */
+  let maxChain = 0;
 
   // --- world container -------------------------------------------------
   const world = el('div', { position: 'absolute', inset: '0px', willChange: 'transform' });
@@ -44,7 +53,7 @@ export function gameScreen(go) {
     position: 'absolute', left: '0px', top: '0px',
     width: px(PHYSICS.peepSize), height: px(PHYSICS.peepSize),
     zIndex: '6', willChange: 'transform',
-  }, peep(PHYSICS.peepSize, 'run', 'none', false));
+  }, peep(PHYSICS.peepSize, 'run', outfit, false));
 
   // The doc's red-dashed BEST line: a real place in the world, only drawable
   // because the camera never descends.
@@ -73,9 +82,13 @@ export function gameScreen(go) {
   /**
    * Pool one stream of world objects: add what entered view, drop what left.
    * A run is unbounded, so nothing may ever accumulate.
+   *
+   * Every stream positions by CENTRE, because that is what core's containment
+   * maths uses (`|s.x - u.x| <= u.w/2`). Positioning art by a corner here would
+   * put every prop half its own size away from the thing it collides with.
    * @param {Map<number, HTMLElement>} pool
-   * @param {{index:number, at:{x:number,y:number}, size:number}[]} items
-   * @param {(item:{index:number, at:{x:number,y:number}, size:number}) => HTMLElement} build
+   * @param {{index:number, at:{x:number,y:number}, w:number, h:number}[]} items
+   * @param {(item:any) => HTMLElement} build
    */
   function sync(pool, items, build) {
     const live = new Set();
@@ -84,8 +97,8 @@ export function gameScreen(go) {
       if (!pool.has(item.index)) {
         const node = el('div', {
           position: 'absolute',
-          left: px(item.at.x - item.size / 2),
-          top: px(-item.at.y - item.size / 2),
+          left: px(item.at.x - item.w / 2),
+          top: px(-item.at.y - item.h / 2),
         }, build(item));
         world.insertBefore(node, peepEl);
         pool.set(item.index, node);
@@ -103,35 +116,61 @@ export function gameScreen(go) {
   const propEls = new Map();
   /** @type {Map<number, HTMLElement>} */
   const padEls = new Map();
+  /** @type {Map<number, HTMLElement>} */
+  const draftEls = new Map();
+  /** @type {Map<number, HTMLElement>} */
+  const truckEls = new Map();
+  /** Trucks move every frame, so their nodes need repositioning, not just pooling. */
+  /** @type {{index:number, truck:any}[]} */
+  let liveTrucks = [];
 
   /**
    * @param {number} lo world y
    * @param {number} hi world y
    */
   function syncProps(lo, hi) {
+    // Updrafts sit behind everything; draw them first.
+    //
+    // Keyed by y, NOT by position in the returned array. `field` hands out stable
+    // stream indices but `zones` returns bare arrays, and an array index from a
+    // range query shifts as the camera climbs — so pooling on it would quietly
+    // recycle one zone's node for a different zone. Each stream places at most one
+    // object per `updraftEvery`/`truckEvery` points, so y is a unique, stable id.
+    sync(
+      draftEls,
+      zones.updraftsInRange(lo, hi).map((u) => ({ index: Math.round(u.y), at: u, w: u.w, h: u.h })),
+      (item) => updraft(item.w, item.h),
+    );
     sync(
       propEls,
-      field.propsInRange(lo, hi).map(({ index, prop }) => ({
-        index,
-        at: prop,
+      field.propsInRange(lo, hi).map(({ index, prop }) => {
         // A gear is a bigger wheel, and the core already knows by how much —
         // read it rather than restating the scale here, or the art and the
         // collision radius drift apart.
-        size: radiusOf(prop.kind) * 2,
-        kind: prop.kind,
-      })),
-      (item) => (/** @type {any} */ (item).kind === 'gear'
-        ? gear(item.size)
-        : tire(item.size, 4)),
+        const d = radiusOf(prop.kind) * 2;
+        return { index, at: prop, w: d, h: d, kind: prop.kind };
+      }),
+      (item) => (item.kind === 'gear' ? gear(item.w) : tire(item.w, 4)),
     );
     sync(
       padEls,
       field.padsInRange(lo, hi).map(({ index, pad: p }) => ({
-        index,
-        at: p,
-        size: PROPS.padRadius * 2,
+        index, at: p, w: PROPS.padRadius * 2, h: PROPS.padRadius * 2,
       })),
-      (item) => pad(item.size),
+      (item) => pad(item.w),
+    );
+
+    liveTrucks = zones.trucksInRange(lo, hi).map((truck) => ({ index: Math.round(truck.y), truck }));
+    sync(
+      truckEls,
+      liveTrucks.map(({ index, truck }) => ({
+        index,
+        at: { x: truckX(truck, state.t), y: truck.y },
+        w: HAZARD.truckW,
+        h: HAZARD.truckH,
+        truck,
+      })),
+      (item) => hazardTruck(HAZARD.truckW, HAZARD.truckH, item.truck.dir),
     );
   }
 
@@ -141,6 +180,14 @@ export function gameScreen(go) {
   function paint() {
     const h = viewportPoints().h;
     world.style.transform = `translateY(${px(h + state.cameraY)})`;
+
+    // Trucks are the only world object that moves. Their x is recomputed from
+    // truckX(truck, t) rather than integrated, which is exactly what lets a
+    // ghost replay reproduce them from the run clock alone.
+    for (const { index, truck } of liveTrucks) {
+      const node = truckEls.get(index);
+      if (node) node.style.left = px(truckX(truck, state.t) - HAZARD.truckW / 2);
+    }
 
     let rotation;
     let wanted;
@@ -153,7 +200,7 @@ export function gameScreen(go) {
     }
     if (wanted !== pose) {
       pose = wanted;
-      peepEl.replaceChildren(peep(PHYSICS.peepSize, /** @type {any} */ (pose), 'none', false));
+      peepEl.replaceChildren(peep(PHYSICS.peepSize, /** @type {any} */ (pose), outfit, false));
     }
     peepEl.style.transform =
       `translate(${px(state.x - PHYSICS.peepSize / 2)},${px(-state.y - PHYSICS.peepSize / 2)}) rotate(${rotation}deg)`;
@@ -200,7 +247,8 @@ export function gameScreen(go) {
       // Polled once per TICK, not once per frame: isPressed() consumes the press
       // latch, so a tap that came and went between frames still lands on exactly
       // one tick.
-      state = step(state, field, FIXED_DT, input.isPressed(), h);
+      state = step(state, field, FIXED_DT, input.isPressed(), h, zones);
+      if (state.chain > maxChain) maxChain = state.chain;
 
       if (state.phase === 'fly' && prevPhase === 'orbit') medium();
       if (state.phase === 'orbit' && prevPhase === 'fly') tap();
@@ -214,14 +262,21 @@ export function gameScreen(go) {
     if (state.phase === 'dead') {
       stopped = true;
       const metres = scoreOf(state);
-      addFeathers(state.feathers);
+      // recordRun does setBest and addFeathers itself. Calling those here too
+      // would credit the feathers twice — addFeathers is not idempotent.
+      recordRun({
+        metres,
+        feathers: state.feathers,
+        maxChain,
+        biomeIndex: biomeIndexAt(metres),
+      });
       const isBest = metres > best;
-      if (isBest) setBest(metres);
       go(isBest ? 'best' : 'oops', {
         score: metres,
         best: Math.max(best, metres),
         previousBest: best,
         feathers: state.feathers,
+        deathBy: state.deathBy,
       });
       return;
     }
