@@ -2,7 +2,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeField } from './field.js';
-import { FIELD } from './tokens.js';
+import { FIELD, SCORING } from './tokens.js';
+import { biomeAt } from './biome.js';
 
 test('wheel 0 sits at the world origin height', () => {
   assert.equal(makeField(1).wheelAt(0).y, 0);
@@ -84,4 +85,43 @@ test('wheelsInRange returns only wheels inside the band, with field indices', ()
 test('wheelsInRange is empty when the band sits below the field', () => {
   const f = makeField(3);
   assert.deepEqual(f.wheelsInRange(-5000, -1000), []);
+});
+
+test('prop 0 is always a tire', () => {
+  for (const seed of [1, 2, 3, 4242, 77]) {
+    assert.equal(makeField(seed).propAt(0).kind, 'tire');
+  }
+});
+
+test('propsInRange is access-order independent', () => {
+  const jumped = makeField(88);
+  jumped.propAt(40);
+  const jumpedProps = [];
+  for (let i = 0; i <= 40; i++) jumpedProps.push(jumped.propAt(i));
+
+  const sequential = makeField(88);
+  const sequentialProps = [];
+  for (let i = 0; i <= 40; i++) sequentialProps.push(sequential.propAt(i));
+
+  assert.deepEqual(jumpedProps, sequentialProps);
+});
+
+test('every prop kind is one the biome at that height allows', () => {
+  const f = makeField(123);
+  for (let i = 0; i < 300; i++) {
+    const prop = f.propAt(i);
+    const biome = biomeAt(prop.y / SCORING.pointsPerMetre);
+    assert.ok(
+      Object.keys(biome.kinds).includes(prop.kind),
+      `prop ${i} kind ${prop.kind} not allowed in biome ${biome.key} at y=${prop.y}`,
+    );
+  }
+});
+
+test('same seed twice gives identical kind sequences', () => {
+  const a = makeField(555);
+  const b = makeField(555);
+  for (let i = 0; i < 200; i++) {
+    assert.equal(a.propAt(i).kind, b.propAt(i).kind, `kind diverged at prop ${i}`);
+  }
 });

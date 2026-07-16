@@ -32,7 +32,7 @@ import { orbitPosition, stepOrbit, launchVelocity, stepFly, findGrab } from './p
  * @returns {RunState}
  */
 export function createRun(field, viewportH) {
-  const wheel = field.wheelAt(0);
+  const wheel = field.propAt(0);
   const angle = Math.PI / 2; // top of the wheel
   const p = orbitPosition(wheel, angle, PHYSICS.orbitRadius);
   return {
@@ -79,7 +79,7 @@ export function step(state, field, dt, pressed, viewportH) {
   const tapped = pressed && !s.wasPressed;
 
   if (s.phase === 'orbit') {
-    const wheel = field.wheelAt(s.wheelIndex);
+    const wheel = field.propAt(s.wheelIndex);
     if (tapped) {
       // Launch from the angle the player actually saw when they tapped, rather
       // than one frame further along.
@@ -115,18 +115,19 @@ export function step(state, field, dt, pressed, viewportH) {
 
     // Release the re-grab lock once Peep is clear of that wheel's band.
     if (s.lockWheel >= 0) {
-      const lw = field.wheelAt(s.lockWheel);
+      const lw = field.propAt(s.lockWheel);
       if (Math.hypot(s.x - lw.x, s.y - lw.y) > band) s.lockWheel = -1;
     }
 
     // Touching a wheel's band attaches automatically — the player times the
     // launch, never the catch.
     const entries = field
-      .wheelsInRange(s.y - band, s.y + band)
-      .filter((e) => e.index !== s.lockWheel);
+      .propsInRange(s.y - band, s.y + band)
+      .filter((e) => e.index !== s.lockWheel)
+      .map((e) => ({ index: e.index, wheel: e.prop }));
     const hit = findGrab({ x: s.x, y: s.y }, entries, PHYSICS.orbitRadius, PHYSICS.grabTolerance);
     if (hit) {
-      const wheel = field.wheelAt(hit.index);
+      const wheel = field.propAt(hit.index);
       const p = orbitPosition(wheel, hit.angle, PHYSICS.orbitRadius);
       s.phase = 'orbit';
       s.wheelIndex = hit.index;
