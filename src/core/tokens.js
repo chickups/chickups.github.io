@@ -122,3 +122,38 @@ export const PROPS = Object.freeze({
   /** pt, +/-. Jitter around the midpoint x of the pad's two neighbouring props. */
   padXJitter: 30,
 });
+
+/**
+ * Updraft zones (doc §13): a column of rising air Peep can fly through. Not a
+ * spine prop — no orbit, no attach, no chain/mult/feathers. Only `ridge` and
+ * `escape` biomes spawn them.
+ */
+export const ZONES = Object.freeze({
+  /** pt/s^2 of upward push, applied IN ADDITION to gravity while Peep's centre
+   *  is inside the rect. MUST exceed PHYSICS.gravity or an updraft cannot lift
+   *  — see the guard test in zones.test.js. */
+  updraftLift: 620,
+  /** pt/s. Terminal upward speed inside a draft, so it cannot fling Peep forever. */
+  updraftMaxV: 300,
+  updraftW: 90,
+  updraftH: 260,
+  /** ~one updraft per this many pt of climb, in biomes that have them. */
+  updraftEvery: 520,
+});
+
+/**
+ * Trucks (doc §13): the second failure condition. Moving hazards that drive
+ * horizontally across the field and wrap. Only `highway` and `escape` biomes
+ * spawn them.
+ */
+export const HAZARD = Object.freeze({
+  truckW: 130,
+  truckH: 64,
+  /** pt/s. */
+  truckSpeed: 90,
+  /** one truck per this many pt of climb, in truck biomes. */
+  truckEvery: 600,
+  /** pt. Peep's collision box is deliberately smaller than his art: near-misses
+   *  should feel near, and the base game's only failure is falling. */
+  peepHitR: 18,
+});
