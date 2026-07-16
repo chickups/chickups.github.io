@@ -10,7 +10,23 @@ import { COLORS } from '../../core/tokens.js';
 import { getFeathers, markIntroSeen } from '../../storage.js';
 
 /**
- * @param {(name: string) => void} go
+ * A round entry point into the Journey map, tucked next to the (inert) settings
+ * button so it does not disturb the Daily Run / Race a Ghost card row.
+ * @param {(name: string, arg?: any) => void} go
+ * @returns {HTMLElement}
+ */
+function journeyButton(go) {
+  const node = el('div', {
+    width: px(42), height: px(42), borderRadius: '50%',
+    background: 'rgba(255,251,240,.92)', boxShadow: '0 3px 0 rgba(75,53,36,.12)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+  }, icon('map', 20, COLORS.orangeD));
+  node.addEventListener('click', () => go('journey'));
+  return node;
+}
+
+/**
+ * @param {(name: string, arg?: any) => void} go
  * @returns {HTMLElement}
  */
 export function homeScreen(go) {
@@ -42,12 +58,17 @@ export function homeScreen(go) {
         pill('feather', String(getFeathers()), COLORS.yellowD),
         pill('flame', '0', COLORS.orangeD),
       ),
-      // Settings is designed but inert in slice 1.
-      el('div', {
-        width: px(42), height: px(42), borderRadius: '50%',
-        background: 'rgba(255,251,240,.92)', boxShadow: '0 3px 0 rgba(75,53,36,.12)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: '0.55',
-      }, icon('gear', 22, COLORS.ink)),
+      el(
+        'div',
+        { display: 'flex', gap: px(8) },
+        journeyButton(go),
+        // Settings is designed but inert in slice 1.
+        el('div', {
+          width: px(42), height: px(42), borderRadius: '50%',
+          background: 'rgba(255,251,240,.92)', boxShadow: '0 3px 0 rgba(75,53,36,.12)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: '0.55',
+        }, icon('gear', 22, COLORS.ink)),
+      ),
     ),
     el('div', { position: 'absolute', top: px(200), left: '50%', transform: 'translateX(-46%) scale(.62)' }, truck(120)),
     el('div', { position: 'absolute', top: px(132), left: '50%', transform: 'translateX(-50%)', zIndex: '6' }, logo(46)),

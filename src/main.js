@@ -5,6 +5,7 @@ import { registerScreens, go } from './render/screens/router.js';
 import { splashScreen } from './render/screens/splash.js';
 import { introScreen } from './render/screens/intro.js';
 import { homeScreen } from './render/screens/home.js';
+import { journeyScreen } from './render/screens/journey.js';
 import { gameScreen } from './render/screens/game.js';
 import { pauseScreen } from './render/screens/pause.js';
 import { oopsScreen } from './render/screens/oops.js';
@@ -18,6 +19,7 @@ registerScreens(stage, {
   splash: splashScreen,
   intro: introScreen,
   home: homeScreen,
+  journey: journeyScreen,
   game: gameScreen,
   pause: pauseScreen,
   oops: oopsScreen,
