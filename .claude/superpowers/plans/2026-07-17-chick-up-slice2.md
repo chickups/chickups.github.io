@@ -393,15 +393,21 @@ export function dayNumber(msSinceEpoch, tzOffsetMinutes) // -> integer day index
 export function dailySeed(dayNum) // -> seed, well-mixed so adjacent days differ wildly
 ```
 
-`dailySeed` must avoid adjacent-day correlation: mulberry32 with a raw counter seed
-produces near-identical first draws. Hash the day number (e.g. multiply by a large odd
-constant and xor-shift) before seeding.
+**CORRECTION — this task's core is already built and committed.** The claim originally
+written here, that `dailySeed` must hash to avoid adjacent-day correlation, is FALSE and
+was disproved by measurement: mulberry32's output mixer already decorrelates adjacent
+seeds completely (mean |correlation| 0.18 between seeds N and N+1, identical to two seeds
+picked far apart). The hash is kept only as a named seam, not as a fix. Do not "restore"
+the correlation rationale.
 
-Home's Daily Run tile loses "SOON" and shows today's best. One attempt per day is **not**
-enforced — replays are allowed, but only the day's first score is kept as the daily best.
+Beware the related test trap: asserting `|rngA() - rngB()| >= 0.01` per pair is invalid,
+because two genuinely independent uniforms land that close ~2% of the time. Test the mean
+gap over many pairs against its expected value of 1/3 instead.
 
-Tests: the same day gives the same seed; adjacent days give uncorrelated first draws (fail
-if `|rngA()-rngB()| < 0.01`); `dayNumber` rolls over at local midnight, not UTC.
+Remaining for this task: Home's Daily Run tile loses "SOON" and shows today's best. One
+attempt per day is **not** enforced — replays are allowed, but only the day's first score
+is kept as the daily best. Wire `dailySeed(dayNumber(Date.now(), new Date().getTimezoneOffset()))`
+into the game screen's seed. The clock is read in `render/`, never in `core/`.
 
 ```bash
 git add -A && git commit -m "feat: daily run"
