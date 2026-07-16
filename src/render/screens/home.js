@@ -7,7 +7,8 @@ import { logo } from '../art/logo.js';
 import { icon } from '../art/icon.js';
 import { primaryButton, pill, card, TAP_MIN } from '../ui.js';
 import { COLORS } from '../../core/tokens.js';
-import { getFeathers, markIntroSeen, getEquippedOutfit } from '../../storage.js';
+import { getFeathers, markIntroSeen, getEquippedOutfit, getDailyBest } from '../../storage.js';
+import { dayNumber } from '../../core/daily.js';
 
 /**
  * A round top-bar entry point, matching the Journey button's style. Used for
@@ -25,6 +26,17 @@ function navButton(glyph, go, screen) {
   }, icon(glyph, 20, COLORS.orangeD));
   node.addEventListener('click', () => go(screen));
   return node;
+}
+
+/**
+ * The daily route's subtitle. Reads the clock here in render/, never in core/:
+ * `dayNumber` takes the time as an argument precisely so core stays pure.
+ * @returns {string}
+ */
+function todaysRouteLabel() {
+  const day = dayNumber(Date.now(), new Date().getTimezoneOffset());
+  const best = getDailyBest(day);
+  return best > 0 ? `Today's best ${best} m` : "Today's route";
 }
 
 /**
@@ -103,7 +115,10 @@ export function homeScreen(go) {
       el(
         'div',
         { width: '100%', display: 'flex', gap: px(12) },
-        card('Daily Run', "Today's route", { disabled: true, badge: 'SOON' }),
+        // The daily route needs no server: the field is a pure function of its
+        // seed, so seeding from the date gives everyone the same route without
+        // anyone distributing it. Only a leaderboard would need a backend.
+        card('Daily Run', todaysRouteLabel(), { onTap: () => go('game', { daily: true }) }),
         card('Race a Ghost', 'Beat your best', { disabled: true, badge: 'SOON' }),
       ),
     ),

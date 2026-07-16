@@ -14,7 +14,8 @@ import { biomeIndexAt } from '../../core/biome.js';
 import { createRun, step, scoreOf, radiusOf } from '../../core/run.js';
 import { PHYSICS, SCORING, COLORS, PROPS, HAZARD } from '../../core/tokens.js';
 import { makeInput } from '../../input.js';
-import { getBest, recordRun, getEquippedOutfit } from '../../storage.js';
+import { getBest, recordRun, getEquippedOutfit, setDailyBest } from '../../storage.js';
+import { dayNumber, dailySeed } from '../../core/daily.js';
 import { viewportPoints } from '../../viewport.js';
 import { tap, medium } from '../../haptics.js';
 
@@ -32,10 +33,15 @@ const TIP_LAND = 'Land on a tire to keep climbing';
  * @param {(name: string, arg?: any) => void} go
  * @returns {HTMLElement}
  */
-export function gameScreen(go) {
+export function gameScreen(go, arg) {
   const vp = viewportPoints();
-  // Seeding from the clock lives in render/, never in core/.
-  const seed = (Date.now() >>> 0) || 1;
+  // Seeding from the clock lives in render/, never in core/. A Daily Run swaps
+  // the clock-seed for the date-seed, which is the whole trick: the field is a
+  // pure function of its seed, so every player gets the same route with no
+  // server involved. Only a leaderboard would need one.
+  const daily = Boolean(arg && arg.daily);
+  const day = dayNumber(Date.now(), new Date().getTimezoneOffset());
+  const seed = daily ? dailySeed(day) : ((Date.now() >>> 0) || 1);
   const field = makeField(seed);
   const zones = makeZones(seed);
   let state = createRun(field, vp.h);
@@ -270,6 +276,7 @@ export function gameScreen(go) {
         maxChain,
         biomeIndex: biomeIndexAt(metres),
       });
+      if (daily) setDailyBest(day, metres);
       const isBest = metres > best;
       go(isBest ? 'best' : 'oops', {
         score: metres,

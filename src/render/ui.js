@@ -153,15 +153,18 @@ export function statTile(label, value, size = 40) {
   );
 }
 
+const CARD_SHADOW = '0 4px 0 rgba(75,53,36,.1)';
+const CARD_SHADOW_PRESSED = '0 0px 0 rgba(75,53,36,.1)';
+
 /**
  * @param {string} title
  * @param {string} subtitle
- * @param {{disabled?: boolean, badge?: string}} [opts]
+ * @param {{disabled?: boolean, badge?: string, onTap?: () => void}} [opts]
  * @returns {HTMLElement}
  */
 export function card(title, subtitle, opts = {}) {
   const disabled = opts.disabled ?? false;
-  return el(
+  const node = el(
     'div',
     {
       position: 'relative',
@@ -169,8 +172,9 @@ export function card(title, subtitle, opts = {}) {
       background: COLORS.cream,
       borderRadius: px(22),
       padding: `${px(14)} ${px(16)}`,
-      boxShadow: '0 4px 0 rgba(75,53,36,.1)',
+      boxShadow: CARD_SHADOW,
       opacity: disabled ? '0.55' : '1',
+      cursor: !disabled && opts.onTap ? 'pointer' : 'default',
     },
     el('div', { font: `800 ${px(17)} 'Baloo 2'`, color: COLORS.ink }, title),
     el('div', { font: `700 ${px(12.5)} 'Nunito'`, color: COLORS.muted }, subtitle),
@@ -183,4 +187,8 @@ export function card(title, subtitle, opts = {}) {
         }, opts.badge)
       : null,
   );
+  if (!disabled && opts.onTap) {
+    pressable(node, 4, CARD_SHADOW, CARD_SHADOW_PRESSED, opts.onTap);
+  }
+  return node;
 }

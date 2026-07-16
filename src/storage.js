@@ -7,6 +7,10 @@ const K = {
   seenIntro: 'chickup.seenIntro',
   outfitsOwned: 'chickup.outfitsOwned',
   outfitEquipped: 'chickup.outfitEquipped',
+  // The daily best is stored per day number, so yesterday's score never leaks
+  // into today's route. Old days are pruned on write; a run is a few bytes but
+  // localStorage is small and a key per day would grow forever.
+  dailyBest: 'chickup.dailyBest',
   statRuns: 'chickup.stat.runs',
   statMaxChain: 'chickup.stat.maxChain',
   statBiomesReached: 'chickup.stat.biomesReached',
@@ -194,4 +198,52 @@ export function recordRun({ metres, feathers, maxChain, biomeIndex }) {
   write(K.statMaxChain, String(Math.max(readNumber(K.statMaxChain, 0), Math.floor(maxChain) || 0)));
   const reached = Math.max(0, Math.floor(biomeIndex) + 1);
   write(K.statBiomesReached, String(Math.max(readNumber(K.statBiomesReached, 0), reached)));
+}
+
+/**
+ * Read the daily-best map, tolerating anything localStorage might hold: an older
+ * build's shape, hand-edited JSON, or plain junk.
+ * @returns {Record<string, number>}
+ */
+function readDailyMap() {
+  try {
+    const raw = localStorage.getItem(K.dailyBest);
+    if (!raw) return {};
+    const v = JSON.parse(raw);
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
+    /** @type {Record<string, number>} */
+    const out = {};
+    for (const [k, n] of Object.entries(v)) if (Number.isFinite(n)) out[k] = Number(n);
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Best distance on a given day's route.
+ * @param {number} day from `dayNumber()` in core/daily.js
+ * @returns {number} metres, 0 if the route has not been run today
+ */
+export function getDailyBest(day) {
+  return readDailyMap()[String(day)] ?? 0;
+}
+
+/**
+ * Record a daily-route result. Keeps only the best for the day.
+ * @param {number} day
+ * @param {number} metres
+ */
+export function setDailyBest(day, metres) {
+  const map = readDailyMap();
+  const key = String(day);
+  if ((map[key] ?? 0) >= metres) return;
+  map[key] = Math.floor(metres);
+  // Keep only the last few days. Without pruning this map grows one entry per
+  // day forever, and localStorage has no eviction of its own.
+  const kept = Object.keys(map)
+    .map(Number)
+    .filter((d) => day - d < 7)
+    .reduce((acc, d) => { acc[String(d)] = map[String(d)]; return acc; }, /** @type {Record<string, number>} */ ({}));
+  write(K.dailyBest, JSON.stringify(kept));
 }
