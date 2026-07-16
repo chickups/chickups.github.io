@@ -2,18 +2,23 @@
 import { el, px } from '../el.js';
 import { peep } from '../art/peep.js';
 import { tire } from '../art/tire.js';
+import { gear } from '../art/gear.js';
+import { pad } from '../art/pad.js';
 import { gamebg } from '../art/gamebg.js';
 import { makeHud } from '../hud.js';
 import { makeField } from '../../core/field.js';
-import { createRun, step, scoreOf } from '../../core/run.js';
-import { PHYSICS, SCORING, COLORS } from '../../core/tokens.js';
+import { createRun, step, scoreOf, radiusOf } from '../../core/run.js';
+import { PHYSICS, SCORING, COLORS, PROPS } from '../../core/tokens.js';
 import { makeInput } from '../../input.js';
 import { getBest, setBest, addFeathers } from '../../storage.js';
 import { viewportPoints } from '../../viewport.js';
 import { tap, medium } from '../../haptics.js';
 
-const WHEEL_SIZE = PHYSICS.orbitRadius * 2;
 const DEG = 180 / Math.PI;
+
+/** How far beyond the viewport a prop is kept alive. Sized to the LARGEST prop —
+ *  a gear is wider than a tire, so a tire-sized band pops gears in at the edge. */
+const CULL_BAND = Math.max(radiusOf('gear'), PROPS.padRadius) + PHYSICS.grabTolerance;
 
 /** Tip copy, verbatim from doc §04. */
 const TIP_TAP = 'Tap to launch!';
@@ -64,40 +69,70 @@ export function gameScreen(go) {
   const root = el('div', { position: 'absolute', inset: '0px', cursor: 'pointer' },
     gamebg(world), hud.root);
 
-  // --- wheel pooling ---------------------------------------------------
+  // --- prop pooling ----------------------------------------------------
+  /**
+   * Pool one stream of world objects: add what entered view, drop what left.
+   * A run is unbounded, so nothing may ever accumulate.
+   * @param {Map<number, HTMLElement>} pool
+   * @param {{index:number, at:{x:number,y:number}, size:number}[]} items
+   * @param {(item:{index:number, at:{x:number,y:number}, size:number}) => HTMLElement} build
+   */
+  function sync(pool, items, build) {
+    const live = new Set();
+    for (const item of items) {
+      live.add(item.index);
+      if (!pool.has(item.index)) {
+        const node = el('div', {
+          position: 'absolute',
+          left: px(item.at.x - item.size / 2),
+          top: px(-item.at.y - item.size / 2),
+        }, build(item));
+        world.insertBefore(node, peepEl);
+        pool.set(item.index, node);
+      }
+    }
+    for (const [index, node] of pool) {
+      if (!live.has(index)) {
+        node.remove();
+        pool.delete(index);
+      }
+    }
+  }
+
   /** @type {Map<number, HTMLElement>} */
-  const wheelEls = new Map();
+  const propEls = new Map();
+  /** @type {Map<number, HTMLElement>} */
+  const padEls = new Map();
 
   /**
-   * Add wheels entering the view, drop those that have left. A run is
-   * unbounded, so nothing may accumulate.
    * @param {number} lo world y
    * @param {number} hi world y
    */
-  function syncWheels(lo, hi) {
-    const live = new Set();
-    for (const { index, wheel } of field.wheelsInRange(lo, hi)) {
-      live.add(index);
-      if (!wheelEls.has(index)) {
-        const node = el(
-          'div',
-          {
-            position: 'absolute',
-            left: px(wheel.x - WHEEL_SIZE / 2),
-            top: px(-wheel.y - WHEEL_SIZE / 2),
-          },
-          tire(WHEEL_SIZE, 4),
-        );
-        world.insertBefore(node, peepEl);
-        wheelEls.set(index, node);
-      }
-    }
-    for (const [index, node] of wheelEls) {
-      if (!live.has(index)) {
-        node.remove();
-        wheelEls.delete(index);
-      }
-    }
+  function syncProps(lo, hi) {
+    sync(
+      propEls,
+      field.propsInRange(lo, hi).map(({ index, prop }) => ({
+        index,
+        at: prop,
+        // A gear is a bigger wheel, and the core already knows by how much —
+        // read it rather than restating the scale here, or the art and the
+        // collision radius drift apart.
+        size: radiusOf(prop.kind) * 2,
+        kind: prop.kind,
+      })),
+      (item) => (/** @type {any} */ (item).kind === 'gear'
+        ? gear(item.size)
+        : tire(item.size, 4)),
+    );
+    sync(
+      padEls,
+      field.padsInRange(lo, hi).map(({ index, pad: p }) => ({
+        index,
+        at: p,
+        size: PROPS.padRadius * 2,
+      })),
+      (item) => pad(item.size),
+    );
   }
 
   // --- painting --------------------------------------------------------
@@ -173,8 +208,7 @@ export function gameScreen(go) {
     }
     if (ticks >= MAX_TICKS) acc = 0;
 
-    const band = PHYSICS.orbitRadius + PHYSICS.grabTolerance;
-    syncWheels(state.cameraY - band, state.cameraY + h + band);
+    syncProps(state.cameraY - CULL_BAND, state.cameraY + h + CULL_BAND);
     paint();
 
     if (state.phase === 'dead') {
@@ -194,7 +228,7 @@ export function gameScreen(go) {
     raf = requestAnimationFrame(frame);
   }
 
-  syncWheels(state.cameraY - 200, state.cameraY + vp.h + 200);
+  syncProps(state.cameraY - CULL_BAND, state.cameraY + vp.h + CULL_BAND);
   paint();
   raf = requestAnimationFrame(frame);
 
