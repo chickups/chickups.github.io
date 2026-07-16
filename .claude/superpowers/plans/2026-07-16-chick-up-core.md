@@ -162,16 +162,28 @@ export const COLORS = Object.freeze({
  * They are gathered here because they WILL need play-testing. This is the tuning surface.
  */
 export const PHYSICS = Object.freeze({
-  /** rad/s. The prototype's `angle += 2.7*dt`. */
-  orbitRate: 2.7,
+  /**
+   * rad/s. ~0.63s per revolution.
+   *
+   * NOT the prototype's 2.7. The prototype's orbit is decorative — it never has
+   * to launch anything anywhere. Here, launch speed IS orbit speed
+   * (`orbitRate * orbitRadius * launchBoost`), and the binding constraint is
+   * VERTICAL climb: Peep must gain a `FIELD.gapStart` of height per wheel, and
+   * max rise is `v^2/(2*gravity)`. At 2.7 rad/s, v = 167 pt/s and max rise is
+   * 15pt against a 250pt gap — the game is unwinnable by a factor of ~16, at any
+   * gravity that is not absurdly floaty. Raising the rate (rather than
+   * `launchBoost`) keeps launch physically honest and fixes a 2.3s revolution
+   * that was far too sluggish for a game about timing your release.
+   */
+  orbitRate: 10.0,
   /** pt. The prototype's `R = 62`. */
   orbitRadius: 62,
   /** pt. Half-width of the annulus in which a grab registers. */
   grabTolerance: 22,
   /** Scales launch speed away from the true tangential speed. 1.0 = physically honest. */
   launchBoost: 1.0,
-  /** pt/s^2, positive; applied downward. */
-  gravity: 900,
+  /** pt/s^2, positive; applied downward. Gives max rise ~384pt vs the 250pt gap. */
+  gravity: 500,
   /** pt. The prototype's `PEEP = 64`. Render size only; not used for collision. */
   peepSize: 64,
 });
@@ -1012,8 +1024,11 @@ test('chain breaks when Peep falls below the wheel he last left', () => {
   const f = makeField(1);
   const w2 = f.wheelAt(2);
   let s = createRun(f, VH);
+  // x:0 keeps Peep clear of every wheel column, so nothing can grab him.
   s = { ...s, chain: 5, mult: 3, phase: 'fly', lastWheelY: w2.y, x: 0, y: w2.y + 10, vx: 0, vy: -10, lockWheel: -1 };
-  s = step(s, f, DT, false, VH);
+  // Fall until he is genuinely below the wheel he left. A single frame moves him
+  // well under a point at any sane gravity, so stepping once cannot get there.
+  for (let i = 0; i < 60 && s.y >= w2.y; i++) s = step(s, f, DT, false, VH);
   assert.ok(s.y < w2.y, 'precondition: Peep dropped below the wheel');
   assert.equal(s.chain, 0);
   assert.equal(s.mult, 1);
@@ -3486,10 +3501,25 @@ Expected: a stable node count. If tires accumulate, `syncWheels` culling is brok
 
 **This is the real work of the slice, and it cannot be skipped.** The constants in `src/core/tokens.js` are guesses; the design doc does not contain them and the prototype fakes all of them. Play, then adjust `PHYSICS` and `FIELD`:
 
-- Peep barely climbs, or arcs die before the next tire → lower `gravity`, or raise `launchBoost`, or lower `FIELD.gapStart`.
-- Peep flies far past every tire → raise `gravity` or lower `launchBoost`.
+**The governing equation.** Launch speed is `v = orbitRate × orbitRadius × launchBoost`,
+and the binding constraint is vertical climb: Peep must gain `FIELD.gapStart` of height
+per wheel, with max rise `v²/(2·gravity)`. Keep a margin of roughly **1.5×** rise over
+gap or chaining becomes impossible. The shipped values give `v = 620 pt/s` and a rise of
+about 384pt against a 250pt gap.
+
+Do not reason about the 45° *range* (`v²/g`) — that is horizontal distance, and it is not
+what limits this game. Height is. (This exact mistake produced a first draft of the
+constants under which the game was unwinnable.)
+
+- Peep barely climbs, or arcs die before the next tire → raise `orbitRate`, or lower
+  `gravity`, or lower `FIELD.gapStart`. Check `v²/(2·gravity)` against `gapStart` first;
+  if that ratio is under ~1.5, no amount of player skill will save it.
+- Peep flies far past every tire → raise `gravity` or lower `orbitRate`.
 - Grabs feel unfair or fiddly → raise `grabTolerance`. Grabs feel magnetic and unearned → lower it.
-- Orbits feel sluggish or twitchy → adjust `orbitRate`. Remember it also scales launch speed (`orbitRate × orbitRadius × launchBoost`), so re-check arcs after changing it.
+- Orbits feel sluggish or twitchy → adjust `orbitRate`, but remember it *also* sets launch
+  speed, which enters the rise equation quadratically. Re-check arcs after every change.
+  Use `launchBoost` if you want to decouple orbit feel from launch power — at the cost of
+  the launch no longer being physically honest.
 - The run gets impossible too fast → lower `FIELD.gapGrowth`. It never gets hard → raise it.
 
 Re-run `npm test` after each change; the core tests are property-based and must all still pass. Constants are the only thing to change here — if a rule needs changing, that is a spec conversation, not a tuning one.
