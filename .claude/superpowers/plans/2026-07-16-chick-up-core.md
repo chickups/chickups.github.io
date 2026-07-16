@@ -20,7 +20,13 @@ Every task's requirements implicitly include this section.
 - **Every file in `src/core/` starts with `// @ts-check`** and annotates exported functions with JSDoc.
 - **Nothing in `src/core/` may import from `src/render/`, reference `document`, `window`, or call `Math.random()`.** This is the portability rule; violating it silently destroys the Swift port.
 - **Coordinates are iOS logical points.** World space is **y-up**, origin at the centre of wheel 0. The DOM is y-down; only `render/` performs the flip.
-- **All colors, physics constants and timings come from `src/core/tokens.js`.** No literal colors or magic numbers elsewhere.
+- **All physics constants, scoring rules and camera behaviour come from `src/core/tokens.js`.** No magic numbers elsewhere. `tokens.js` is the single tuning surface Task 11 depends on and the constants manifest the Swift port inherits.
+- **The shared palette lives in `tokens.js` (`COLORS`)** — ink, cream, gold, orange, the yellows. Anything reused across components (button fills, text, pills, tiles, HUD) must come from there, so a palette change is one edit. `src/render/ui.js` and `src/render/hud.js` are bound by this strictly.
+- **Two deliberate exemptions, neither of which is a defect:**
+  1. **`src/render/art/*`** — verbatim ports of the design-system components, which keep their source literals (Peep's local `const C = {...}`, Tire's tread greys, GameBg's gradient stops). This follows from Porting Rule 5: art fidelity is the entire reason this project renders in DOM rather than canvas, and hand-transcribing ~105 hex values into tokens would risk silently altering the art for no gain.
+  2. **One-off scenic gradient stops in `src/render/screens/*`** — each screen's backdrop is a bespoke multi-stop gradient (`#CFEBFB→#72C23A` on Oops, `#FFE08A→#FF963C` on New Best, the barn's `#7A5638→#39291D`). These colours appear once, in one screen, and are not palette. Promoting them to tokens would bloat `COLORS` with ~20 single-use entries and make the palette harder to reason about, not easier. Screens still take every *shared* colour (ink, cream, gold, muted, orangeD) from `COLORS`.
+
+  The test is reuse, not location: **a colour used in more than one place belongs in `tokens.js`; a colour used once, in one screen's own backdrop, may be a literal.**
 - **Copy is verbatim from the design doc.** The string "Game Over" must never appear. The fail screen says `Oops!` / `One more flap?`.
 - **Portrait only.**
 - Design space width is exactly **393**. Reference height **852**. Both from the doc's `393×852pt`.
@@ -97,19 +103,31 @@ The source components live in the Claude Design project and are reproduced verba
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test src/core/"
+    "test": "node --test"
   }
 }
 ```
 
 No `dependencies` key, no `devDependencies` key. This is deliberate and permanent.
 
-- [ ] **Step 2: Create `.gitignore`**
+The test script is **bare `node --test`**, with no path argument. Node's default
+discovery finds `**/*.test.js` — which today means `src/core/` only, since that
+is the only place tests are allowed to exist. Do not "improve" this to
+`node --test src/core/`: passing a directory makes Node treat the directory
+itself as a test file and the run dies with `MODULE_NOT_FOUND`.
+
+- [ ] **Step 2: Extend `.gitignore`**
+
+`.gitignore` already exists and already ignores `.claude/worktrees/` — do not
+overwrite it. **Append** these two lines, leaving the existing rule intact:
 
 ```
 .DS_Store
 node_modules/
 ```
+
+Verify with `cat .gitignore`. Expected: three rules — `.claude/worktrees/`,
+`.DS_Store`, `node_modules/`.
 
 - [ ] **Step 3: Create `src/core/tokens.js`**
 
@@ -148,16 +166,28 @@ export const COLORS = Object.freeze({
  * They are gathered here because they WILL need play-testing. This is the tuning surface.
  */
 export const PHYSICS = Object.freeze({
-  /** rad/s. The prototype's `angle += 2.7*dt`. */
-  orbitRate: 2.7,
+  /**
+   * rad/s. ~0.63s per revolution.
+   *
+   * NOT the prototype's 2.7. The prototype's orbit is decorative — it never has
+   * to launch anything anywhere. Here, launch speed IS orbit speed
+   * (`orbitRate * orbitRadius * launchBoost`), and the binding constraint is
+   * VERTICAL climb: Peep must gain a `FIELD.gapStart` of height per wheel, and
+   * max rise is `v^2/(2*gravity)`. At 2.7 rad/s, v = 167 pt/s and max rise is
+   * 15pt against a 250pt gap — the game is unwinnable by a factor of ~16, at any
+   * gravity that is not absurdly floaty. Raising the rate (rather than
+   * `launchBoost`) keeps launch physically honest and fixes a 2.3s revolution
+   * that was far too sluggish for a game about timing your release.
+   */
+  orbitRate: 10.0,
   /** pt. The prototype's `R = 62`. */
   orbitRadius: 62,
   /** pt. Half-width of the annulus in which a grab registers. */
   grabTolerance: 22,
   /** Scales launch speed away from the true tangential speed. 1.0 = physically honest. */
   launchBoost: 1.0,
-  /** pt/s^2, positive; applied downward. */
-  gravity: 900,
+  /** pt/s^2, positive; applied downward. Gives max rise ~384pt vs the 250pt gap. */
+  gravity: 500,
   /** pt. The prototype's `PEEP = 64`. Render size only; not used for collision. */
   peepSize: 64,
 });
@@ -998,8 +1028,11 @@ test('chain breaks when Peep falls below the wheel he last left', () => {
   const f = makeField(1);
   const w2 = f.wheelAt(2);
   let s = createRun(f, VH);
+  // x:0 keeps Peep clear of every wheel column, so nothing can grab him.
   s = { ...s, chain: 5, mult: 3, phase: 'fly', lastWheelY: w2.y, x: 0, y: w2.y + 10, vx: 0, vy: -10, lockWheel: -1 };
-  s = step(s, f, DT, false, VH);
+  // Fall until he is genuinely below the wheel he left. A single frame moves him
+  // well under a point at any sane gravity, so stepping once cannot get there.
+  for (let i = 0; i < 60 && s.y >= w2.y; i++) s = step(s, f, DT, false, VH);
   assert.ok(s.y < w2.y, 'precondition: Peep dropped below the wheel');
   assert.equal(s.chain, 0);
   assert.equal(s.mult, 1);
@@ -2819,17 +2852,29 @@ import { COLORS } from '../core/tokens.js';
 export const TAP_MIN = 44;
 
 /**
- * The doc's signature button: a solid bottom "lip" that compresses on press.
+ * The doc's signature button (§11): a solid bottom "lip" that compresses on press.
+ *
+ * Both shadow strings are passed in explicitly rather than derived by rewriting
+ * `node.style.boxShadow`. Reading that property back does NOT return what you
+ * wrote — the browser normalises it, moving the colour first and expanding
+ * offsets, so `0 8px 0 #D19412` comes back as `rgb(209, 148, 18) 0px 8px 0px`.
+ * Any regex written against the authored form silently fails to match, the
+ * pressed shadow ends up identical to the rest shadow, and the lip never
+ * compresses at all — with no error anywhere.
+ *
  * @param {HTMLElement} node
  * @param {number} lip shadow depth in points
+ * @param {string} restShadow
+ * @param {string} pressShadow
  */
-function pressable(node, lip) {
+function pressable(node, lip, restShadow, pressShadow) {
   node.addEventListener('pointerdown', () => {
     node.style.transform = `translateY(${px(lip)})`;
-    node.style.boxShadow = node.style.boxShadow.replace(/0 \d+(\.\d+)?px 0/, '0 0px 0');
+    node.style.boxShadow = pressShadow;
   });
   const release = () => {
     node.style.transform = 'translateY(0px)';
+    node.style.boxShadow = restShadow;
   };
   node.addEventListener('pointerup', release);
   node.addEventListener('pointerleave', release);
@@ -2847,6 +2892,8 @@ export function primaryButton(label, glyph, onTap, opts = {}) {
   const size = opts.size ?? 30;
   const lip = opts.lip ?? 8;
   const disabled = opts.disabled ?? false;
+  const restShadow = `0 ${px(lip)} 0 ${COLORS.goldD}, 0 ${px(lip * 2)} ${px(24)} rgba(75,53,36,.28)`;
+  const pressShadow = `0 0px 0 ${COLORS.goldD}, 0 ${px(lip)} ${px(12)} rgba(75,53,36,.28)`;
   const node = el(
     'div',
     {
@@ -2859,16 +2906,14 @@ export function primaryButton(label, glyph, onTap, opts = {}) {
       font: `800 ${px(size)} 'Baloo 2'`,
       padding: `${px(size * 0.73)} 0`,
       borderRadius: px(34),
-      boxShadow: disabled
-        ? 'none'
-        : `0 ${px(lip)}px 0 ${COLORS.goldD}, 0 ${px(lip * 2)}px ${px(24)} rgba(75,53,36,.28)`,
-      transition: 'transform .08s',
+      boxShadow: disabled ? 'none' : restShadow,
+      transition: 'transform .08s, box-shadow .08s',
     },
     glyph ? icon(glyph, size * 0.87, disabled ? '#9c8f7a' : COLORS.ink) : null,
     label,
   );
   if (!disabled) {
-    pressable(node, lip);
+    pressable(node, lip, restShadow, pressShadow);
     node.addEventListener('pointerup', onTap);
   }
   return node;
@@ -2881,6 +2926,8 @@ export function primaryButton(label, glyph, onTap, opts = {}) {
  * @returns {HTMLElement}
  */
 export function secondaryButton(label, glyph, onTap) {
+  const restShadow = '0 4px 0 rgba(75,53,36,.12)';
+  const pressShadow = '0 0px 0 rgba(75,53,36,.12)';
   const node = el(
     'div',
     {
@@ -2892,13 +2939,13 @@ export function secondaryButton(label, glyph, onTap) {
       font: `800 ${px(17)} 'Baloo 2'`,
       padding: `${px(13)} 0`,
       borderRadius: px(20),
-      boxShadow: '0 4px 0 rgba(75,53,36,.12)',
-      transition: 'transform .08s',
+      boxShadow: restShadow,
+      transition: 'transform .08s, box-shadow .08s',
     },
     glyph ? icon(glyph, 18, COLORS.ink) : null,
     label,
   );
-  pressable(node, 4);
+  pressable(node, 4, restShadow, pressShadow);
   node.addEventListener('pointerup', onTap);
   return node;
 }
@@ -2921,6 +2968,22 @@ export function pill(glyph, text, color = COLORS.ink) {
     },
     icon(glyph, 16, color),
     el('span', { font: `800 ${px(16)} 'Baloo 2'`, color }, text),
+  );
+}
+
+/**
+ * A labelled stat tile — SCORE / BEST / MULT. Used by Pause and Oops!.
+ * @param {string} label
+ * @param {string} value
+ * @param {number} [size] font size of the value, in points
+ * @returns {HTMLElement}
+ */
+export function statTile(label, value, size = 40) {
+  return el(
+    'div',
+    { flex: '1', background: COLORS.creamDeep, borderRadius: px(20), padding: px(12), textAlign: 'center' },
+    el('div', { font: `700 ${px(12)} 'Nunito'`, color: COLORS.muted, letterSpacing: '.06em' }, label),
+    el('div', { font: `800 ${px(size)} 'Baloo 2'`, color: COLORS.ink, lineHeight: '1.1' }, value),
   );
 }
 
@@ -3451,10 +3514,25 @@ Expected: a stable node count. If tires accumulate, `syncWheels` culling is brok
 
 **This is the real work of the slice, and it cannot be skipped.** The constants in `src/core/tokens.js` are guesses; the design doc does not contain them and the prototype fakes all of them. Play, then adjust `PHYSICS` and `FIELD`:
 
-- Peep barely climbs, or arcs die before the next tire → lower `gravity`, or raise `launchBoost`, or lower `FIELD.gapStart`.
-- Peep flies far past every tire → raise `gravity` or lower `launchBoost`.
+**The governing equation.** Launch speed is `v = orbitRate × orbitRadius × launchBoost`,
+and the binding constraint is vertical climb: Peep must gain `FIELD.gapStart` of height
+per wheel, with max rise `v²/(2·gravity)`. Keep a margin of roughly **1.5×** rise over
+gap or chaining becomes impossible. The shipped values give `v = 620 pt/s` and a rise of
+about 384pt against a 250pt gap.
+
+Do not reason about the 45° *range* (`v²/g`) — that is horizontal distance, and it is not
+what limits this game. Height is. (This exact mistake produced a first draft of the
+constants under which the game was unwinnable.)
+
+- Peep barely climbs, or arcs die before the next tire → raise `orbitRate`, or lower
+  `gravity`, or lower `FIELD.gapStart`. Check `v²/(2·gravity)` against `gapStart` first;
+  if that ratio is under ~1.5, no amount of player skill will save it.
+- Peep flies far past every tire → raise `gravity` or lower `orbitRate`.
 - Grabs feel unfair or fiddly → raise `grabTolerance`. Grabs feel magnetic and unearned → lower it.
-- Orbits feel sluggish or twitchy → adjust `orbitRate`. Remember it also scales launch speed (`orbitRate × orbitRadius × launchBoost`), so re-check arcs after changing it.
+- Orbits feel sluggish or twitchy → adjust `orbitRate`, but remember it *also* sets launch
+  speed, which enters the rise equation quadratically. Re-check arcs after every change.
+  Use `launchBoost` if you want to decouple orbit feel from launch power — at the cost of
+  the launch no longer being physically honest.
 - The run gets impossible too fast → lower `FIELD.gapGrowth`. It never gets hard → raise it.
 
 Re-run `npm test` after each change; the core tests are property-based and must all still pass. Constants are the only thing to change here — if a rule needs changing, that is a spec conversation, not a tuning one.
@@ -3492,7 +3570,7 @@ git commit -m "feat: add HUD and playable game screen with tuned physics"
 ```js
 // @ts-check
 import { el, px } from '../el.js';
-import { primaryButton, secondaryButton } from '../ui.js';
+import { primaryButton, secondaryButton, statTile } from '../ui.js';
 import { COLORS } from '../../core/tokens.js';
 import { scoreOf } from '../../core/run.js';
 
@@ -3503,18 +3581,6 @@ import { scoreOf } from '../../core/run.js';
  */
 export function pauseScreen(go, arg) {
   const s = arg.state;
-
-  /**
-   * @param {string} label
-   * @param {string} value
-   */
-  const stat = (label, value) =>
-    el(
-      'div',
-      { flex: '1', background: COLORS.creamDeep, borderRadius: px(20), padding: px(12), textAlign: 'center' },
-      el('div', { font: `700 ${px(12)} 'Nunito'`, color: COLORS.muted, letterSpacing: '.06em' }, label),
-      el('div', { font: `800 ${px(32)} 'Baloo 2'`, color: COLORS.ink, lineHeight: '1.1' }, value),
-    );
 
   return el(
     'div',
@@ -3534,8 +3600,8 @@ export function pauseScreen(go, arg) {
       el(
         'div',
         { display: 'flex', gap: px(10), margin: `${px(18)} 0` },
-        stat('SCORE', String(scoreOf(s))),
-        stat('MULT.', `×${s.mult}`),
+        statTile('SCORE', String(scoreOf(s)), 32),
+        statTile('MULT.', `×${s.mult}`, 32),
       ),
       primaryButton('Resume', 'play', () => go('game'), { size: 24, lip: 6 }),
       el('div', { height: px(12) }),
@@ -3557,7 +3623,7 @@ export function pauseScreen(go, arg) {
 import { el, px } from '../el.js';
 import { peep } from '../art/peep.js';
 import { icon } from '../art/icon.js';
-import { primaryButton, secondaryButton } from '../ui.js';
+import { primaryButton, secondaryButton, statTile } from '../ui.js';
 import { COLORS } from '../../core/tokens.js';
 
 /**
@@ -3567,18 +3633,6 @@ import { COLORS } from '../../core/tokens.js';
  * @returns {HTMLElement}
  */
 export function oopsScreen(go, arg) {
-  /**
-   * @param {string} label
-   * @param {string} value
-   */
-  const stat = (label, value) =>
-    el(
-      'div',
-      { flex: '1', background: COLORS.creamDeep, borderRadius: px(20), padding: px(12), textAlign: 'center' },
-      el('div', { font: `700 ${px(12)} 'Nunito'`, color: COLORS.muted, letterSpacing: '.06em' }, label),
-      el('div', { font: `800 ${px(40)} 'Baloo 2'`, color: COLORS.ink, lineHeight: '1.1' }, value),
-    );
-
   return el(
     'div',
     {
@@ -3606,7 +3660,7 @@ export function oopsScreen(go, arg) {
       },
       el('div', { textAlign: 'center', font: `800 ${px(40)} 'Baloo 2'`, color: COLORS.ink, lineHeight: '1' }, 'Oops!'),
       el('div', { textAlign: 'center', font: `700 ${px(15)} 'Nunito'`, color: COLORS.orangeD, margin: `${px(4)} 0 ${px(18)}` }, 'One more flap?'),
-      el('div', { display: 'flex', gap: px(14), marginBottom: px(14) }, stat('SCORE', String(arg.score)), stat('BEST', String(arg.best))),
+      el('div', { display: 'flex', gap: px(14), marginBottom: px(14) }, statTile('SCORE', String(arg.score)), statTile('BEST', String(arg.best))),
       el(
         'div',
         { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: px(6), marginBottom: px(16) },

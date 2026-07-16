@@ -1,0 +1,35 @@
+// @ts-check
+import { installViewport } from './viewport.js';
+import { installStyles } from './render/styles.js';
+import { registerScreens, go } from './render/screens/router.js';
+import { splashScreen } from './render/screens/splash.js';
+import { introScreen } from './render/screens/intro.js';
+import { homeScreen } from './render/screens/home.js';
+import { gameScreen } from './render/screens/game.js';
+import { pauseScreen } from './render/screens/pause.js';
+import { oopsScreen } from './render/screens/oops.js';
+import { bestScreen } from './render/screens/best.js';
+
+const stage = /** @type {HTMLElement} */ (document.getElementById('stage'));
+installViewport(stage);
+installStyles();
+
+registerScreens(stage, {
+  splash: splashScreen,
+  intro: introScreen,
+  home: homeScreen,
+  game: gameScreen,
+  pause: pauseScreen,
+  oops: oopsScreen,
+  best: bestScreen,
+});
+
+go('splash');
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {
+      // A failed registration is not fatal — the game just will not run offline.
+    });
+  });
+}

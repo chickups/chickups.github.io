@@ -1,0 +1,16 @@
+{
+  "name": "Chick Up!",
+  "short_name": "Chick Up",
+  "description": "Run. Swing. Wing it. Catch up with the truck!",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#CFEBFB",
+  "theme_color": "#CFEBFB",
+  "icons": [
+    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
