@@ -97,3 +97,20 @@ export const CAMERA = Object.freeze({
   /** Fraction of viewport height, from the bottom, where Peep's high-water mark sits. */
   peepAnchor: 0.45,
 });
+
+/**
+ * Bounce pads and rotating gears (doc §13). Pads bypass the hold-release verb
+ * entirely — no tap, no attach, just a free upward bounce. Gears orbit and
+ * launch exactly like tires but at a scaled rate and radius.
+ */
+export const PROPS = Object.freeze({
+  /** Upward speed a pad imparts, pt/s. Chosen so a pad out-climbs a tire launch:
+   *  rise = padBounce^2/(2*gravity) = 420^2/560 = 315pt vs a tire's 247pt. */
+  padBounce: 420,
+  /** pt. Contact radius of a pad. Generous: missing a pad is "no penalty" (doc §13). */
+  padRadius: 46,
+  /** Gears spin the opposite way to tires, which reverses the launch arc. */
+  gearRateScale: -1.0,
+  /** Gears are bigger, so they launch faster: v = rate*radius. */
+  gearRadiusScale: 1.25,
+});

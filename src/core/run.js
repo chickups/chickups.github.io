@@ -1,8 +1,32 @@
 // @ts-check
-import { PHYSICS, SCORING, CAMERA } from './tokens.js';
+import { PHYSICS, SCORING, CAMERA, PROPS } from './tokens.js';
 import { orbitPosition, stepOrbit, launchVelocity, stepFly, findGrab } from './physics.js';
 
 /** @typedef {import('./field.js').Field} Field */
+/** @typedef {import('./field.js').Prop} Prop */
+
+/**
+ * Orbit radius for a prop kind. Gears are bigger than tires; pads have no
+ * orbit at all (a pad's contact test is a plain disc, not this annulus), so
+ * this is only meaningful for the two attachable kinds.
+ * @param {Prop['kind']} kind
+ * @returns {number}
+ */
+export function radiusOf(kind) {
+  return kind === 'gear' ? PHYSICS.orbitRadius * PROPS.gearRadiusScale : PHYSICS.orbitRadius;
+}
+
+/**
+ * Orbit/launch rate for a prop kind. Gears spin the opposite way to tires
+ * (`gearRateScale` is negative), which reverses their launch arc too — the
+ * same signed rate feeds both `stepOrbit` and `launchVelocity` so the two
+ * stay consistent.
+ * @param {Prop['kind']} kind
+ * @returns {number}
+ */
+export function rateOf(kind) {
+  return kind === 'gear' ? PHYSICS.orbitRate * PROPS.gearRateScale : PHYSICS.orbitRate;
+}
 
 /**
  * @typedef {Object} RunState
@@ -34,7 +58,7 @@ import { orbitPosition, stepOrbit, launchVelocity, stepFly, findGrab } from './p
 export function createRun(field, viewportH) {
   const wheel = field.propAt(0);
   const angle = Math.PI / 2; // top of the wheel
-  const p = orbitPosition(wheel, angle, PHYSICS.orbitRadius);
+  const p = orbitPosition(wheel, angle, radiusOf(wheel.kind));
   return {
     phase: 'orbit',
     wheelIndex: 0,
@@ -80,10 +104,16 @@ export function step(state, field, dt, pressed, viewportH) {
 
   if (s.phase === 'orbit') {
     const wheel = field.propAt(s.wheelIndex);
+    // A gear's rate is negative (gearRateScale), which both spins it the
+    // opposite way and reverses the tangential launch — the same signed rate
+    // must feed both, or a gear would spin one way and launch as if it spun
+    // the other.
+    const rate = rateOf(wheel.kind);
+    const radius = radiusOf(wheel.kind);
     if (tapped) {
       // Launch from the angle the player actually saw when they tapped, rather
       // than one frame further along.
-      const v = launchVelocity(s.angle, PHYSICS.orbitRate, PHYSICS.orbitRadius, PHYSICS.launchBoost);
+      const v = launchVelocity(s.angle, rate, radius, PHYSICS.launchBoost);
       s.vx = v.x;
       s.vy = v.y;
       s.phase = 'fly';
@@ -92,8 +122,8 @@ export function step(state, field, dt, pressed, viewportH) {
       s.everLaunched = true;
     } else {
       // The tire spins by itself; staying on is not something the player sustains.
-      s.angle = stepOrbit(s.angle, dt, PHYSICS.orbitRate);
-      const p = orbitPosition(wheel, s.angle, PHYSICS.orbitRadius);
+      s.angle = stepOrbit(s.angle, dt, rate);
+      const p = orbitPosition(wheel, s.angle, radius);
       s.x = p.x;
       s.y = p.y;
     }
@@ -111,38 +141,64 @@ export function step(state, field, dt, pressed, viewportH) {
       s.mult = 1;
     }
 
-    const band = PHYSICS.orbitRadius + PHYSICS.grabTolerance;
-
-    // Release the re-grab lock once Peep is clear of that wheel's band.
+    // Release the re-grab lock once Peep is clear of the locked prop's own
+    // contact band — a pad's is a plain disc (PROPS.padRadius); an orbitable
+    // prop's is its own radius plus the grab tolerance.
     if (s.lockWheel >= 0) {
       const lw = field.propAt(s.lockWheel);
-      if (Math.hypot(s.x - lw.x, s.y - lw.y) > band) s.lockWheel = -1;
+      const lockBand = lw.kind === 'pad' ? PROPS.padRadius : radiusOf(lw.kind) + PHYSICS.grabTolerance;
+      if (Math.hypot(s.x - lw.x, s.y - lw.y) > lockBand) s.lockWheel = -1;
     }
 
-    // Touching a wheel's band attaches automatically — the player times the
-    // launch, never the catch.
-    const entries = field
-      .propsInRange(s.y - band, s.y + band)
-      .filter((e) => e.index !== s.lockWheel)
-      .map((e) => ({ index: e.index, wheel: e.prop }));
-    const hit = findGrab({ x: s.x, y: s.y }, entries, PHYSICS.orbitRadius, PHYSICS.grabTolerance);
-    if (hit) {
-      const wheel = field.propAt(hit.index);
-      const p = orbitPosition(wheel, hit.angle, PHYSICS.orbitRadius);
-      s.phase = 'orbit';
-      s.wheelIndex = hit.index;
-      s.angle = hit.angle;
-      s.x = p.x;
-      s.y = p.y;
-      s.vx = 0;
-      s.vy = 0;
-      s.lockWheel = -1;
-      s.chain += 1;
-      if (s.chain % SCORING.chainPerMult === 0) {
-        s.mult = Math.min(SCORING.multMax, s.mult + 1);
+    // Pads are touched, not grabbed: a simple distance check against a disc,
+    // scanned separately from findGrab because their contact test differs
+    // entirely from the orbitable annulus test below.
+    const padHit = field
+      .propsInRange(s.y - PROPS.padRadius, s.y + PROPS.padRadius)
+      .find(
+        (e) =>
+          e.prop.kind === 'pad' &&
+          e.index !== s.lockWheel &&
+          Math.hypot(s.x - e.prop.x, s.y - e.prop.y) <= PROPS.padRadius,
+      );
+
+    if (padHit) {
+      // No tap, no attach: a pad bypasses the hold-release verb entirely.
+      // vx is untouched, so it grants no steering — the pad-invariant in
+      // field.js guarantees the very next prop is attachable.
+      s.vy = PROPS.padBounce;
+      s.lastWheelY = padHit.prop.y;
+      s.lockWheel = padHit.index;
+    } else {
+      // Touching an orbitable prop's band attaches automatically — the player
+      // times the launch, never the catch. Each candidate carries its own
+      // radius (a gear's differs from a tire's), and pads are filtered out
+      // entirely — a pad must never be grabbable.
+      const maxRadius = Math.max(radiusOf('tire'), radiusOf('gear'));
+      const band = maxRadius + PHYSICS.grabTolerance;
+      const entries = field
+        .propsInRange(s.y - band, s.y + band)
+        .filter((e) => e.index !== s.lockWheel && e.prop.kind !== 'pad')
+        .map((e) => ({ index: e.index, wheel: e.prop, radius: radiusOf(e.prop.kind) }));
+      const hit = findGrab({ x: s.x, y: s.y }, entries, PHYSICS.grabTolerance);
+      if (hit) {
+        const wheel = field.propAt(hit.index);
+        const p = orbitPosition(wheel, hit.angle, radiusOf(wheel.kind));
+        s.phase = 'orbit';
+        s.wheelIndex = hit.index;
+        s.angle = hit.angle;
+        s.x = p.x;
+        s.y = p.y;
+        s.vx = 0;
+        s.vy = 0;
+        s.lockWheel = -1;
+        s.chain += 1;
+        if (s.chain % SCORING.chainPerMult === 0) {
+          s.mult = Math.min(SCORING.multMax, s.mult + 1);
+        }
+        s.feathers += s.mult;
+        s.everGrabbed = true;
       }
-      s.feathers += s.mult;
-      s.everGrabbed = true;
     }
   }
 

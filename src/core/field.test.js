@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { makeField } from './field.js';
 import { FIELD, SCORING } from './tokens.js';
 import { biomeAt } from './biome.js';
+import { makeRng } from './rng.js';
 
 test('wheel 0 sits at the world origin height', () => {
   assert.equal(makeField(1).wheelAt(0).y, 0);
@@ -123,5 +124,36 @@ test('same seed twice gives identical kind sequences', () => {
   const b = makeField(555);
   for (let i = 0; i < 200; i++) {
     assert.equal(a.propAt(i).kind, b.propAt(i).kind, `kind diverged at prop ${i}`);
+  }
+});
+
+test('a pad is never followed by another pad, across all biomes', () => {
+  for (const seed of [1, 2, 3, 4242, 77, 555, 123]) {
+    const f = makeField(seed);
+    for (let i = 1; i < 400; i++) {
+      const prev = f.propAt(i - 1);
+      const cur = f.propAt(i);
+      assert.ok(
+        !(prev.kind === 'pad' && cur.kind === 'pad'),
+        `seed ${seed}: props ${i - 1} and ${i} are both pads`,
+      );
+    }
+  }
+});
+
+test('the pad invariant does not disturb the x-jitter draw sequence', () => {
+  // Reimplement the x-jitter draw in lockstep with a fresh RNG on the same
+  // seed: draw order is always x-jitter then kind, one of each per index,
+  // regardless of whether the kind gets forced afterward. Prop N's x must
+  // therefore still be exactly the (2N)-th raw draw.
+  const seed = 4242;
+  const rng = makeRng(seed);
+  const f = makeField(seed);
+  for (let i = 0; i < 200; i++) {
+    const col = FIELD.columns[i % FIELD.columns.length];
+    const dx = rng(); // x-jitter draw
+    rng(); // kind draw, consumed but not reimplemented here
+    const expectedX = col + (dx * 2 - 1) * FIELD.jitter;
+    assert.equal(f.propAt(i).x, expectedX, `prop ${i} x diverged from raw draw sequence`);
   }
 });

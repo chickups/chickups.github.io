@@ -52,7 +52,17 @@ export function makeField(seed) {
       // this order, regardless of biome. Reordering or skipping a draw would
       // make the PRNG sequence depend on the biome table.
       const x = col + (rng() * 2 - 1) * FIELD.jitter;
-      const kind = pickKind(biomeAt(y / SCORING.pointsPerMetre), rng);
+      const biome = biomeAt(y / SCORING.pointsPerMetre);
+      let kind = pickKind(biome, rng);
+      // Invariant: a pad is never followed by another pad. Two-plus pads in a
+      // row leave the player with zero horizontal control (a pad preserves vx
+      // and grants no tap), which can be an unwinnable death sentence. The
+      // draw above is always consumed first — this only overrides the result,
+      // exactly like the index-0-is-always-tire rule below, so the PRNG
+      // sequence stays independent of this rule.
+      if (i > 0 && cache[i - 1].kind === 'pad' && kind === 'pad') {
+        kind = attachableKind(biome);
+      }
       cache.push({ x, y, kind: i === 0 ? 'tire' : kind });
     }
     return cache[index];
@@ -102,4 +112,19 @@ function pickKind(biome, rng) {
     if (r < 0) return /** @type {'tire'|'gear'|'pad'} */ (k);
   }
   return /** @type {'tire'|'gear'|'pad'} */ (keys[keys.length - 1]);
+}
+
+/**
+ * The attachable kind (tire preferred, else gear) a biome falls back to when
+ * the "no two pads in a row" invariant forces a re-pick. Every biome that
+ * names `pad` also names `tire`, so this always resolves within that biome's
+ * own kind table — the forced prop is still one the biome allows.
+ *
+ * @param {import('./biome.js').Biome} biome
+ * @returns {'tire'|'gear'}
+ */
+function attachableKind(biome) {
+  if (biome.kinds.tire) return 'tire';
+  if (biome.kinds.gear) return 'gear';
+  return 'tire';
 }

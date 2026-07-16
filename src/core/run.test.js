@@ -1,9 +1,9 @@
 // @ts-check
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createRun, step, scoreOf } from './run.js';
+import { createRun, step, scoreOf, radiusOf, rateOf } from './run.js';
 import { makeField } from './field.js';
-import { PHYSICS, SCORING } from './tokens.js';
+import { PHYSICS, SCORING, PROPS } from './tokens.js';
 
 const VH = 852;
 const DT = 1 / 60;
@@ -81,12 +81,20 @@ test('landing while still holding does not immediately re-launch', () => {
 
 test('multiplier steps every chainPerMult grabs and caps at multMax', () => {
   const f = makeField(1);
+  // Pads aren't grabbable (Task 2), so gather attachable (tire/gear) props to
+  // exercise 20 consecutive grabs; the test is about chain/mult bookkeeping,
+  // not any particular field layout.
+  const attachable = [];
+  for (let i = 1; attachable.length < 20; i++) {
+    const p = f.propAt(i);
+    if (p.kind !== 'pad') attachable.push(p);
+  }
   let s = createRun(f, VH);
   let feathers = 0;
   let expectedMult = 1;
   for (let grab = 1; grab <= 20; grab++) {
-    const w = f.wheelAt(grab);
-    s = { ...s, phase: 'fly', x: w.x + PHYSICS.orbitRadius, y: w.y, vx: 0, vy: 0, lockWheel: -1, wasPressed: false };
+    const w = attachable[grab - 1];
+    s = { ...s, phase: 'fly', x: w.x + radiusOf(w.kind), y: w.y, vx: 0, vy: 0, lockWheel: -1, wasPressed: false };
     s = step(s, f, DT, false, VH);
     if (grab % SCORING.chainPerMult === 0) expectedMult = Math.min(SCORING.multMax, expectedMult + 1);
     feathers += expectedMult;
@@ -184,4 +192,119 @@ test('tutorial flags latch as the player performs each action', () => {
   assert.equal(s.everLaunched, false, 'spinning alone is not launching');
   s = step(s, f, DT, true, VH);
   assert.equal(s.everLaunched, true);
+});
+
+// --- radiusOf / rateOf -----------------------------------------------------
+
+test('radiusOf(gear) is bigger than radiusOf(tire); rateOf(gear) reverses the spin', () => {
+  assert.ok(radiusOf('gear') > radiusOf('tire'));
+  assert.equal(radiusOf('tire'), PHYSICS.orbitRadius);
+  assert.equal(radiusOf('gear'), PHYSICS.orbitRadius * PROPS.gearRadiusScale);
+  assert.equal(rateOf('tire'), PHYSICS.orbitRate);
+  assert.equal(rateOf('gear'), PHYSICS.orbitRate * PROPS.gearRateScale);
+  assert.ok(rateOf('gear') < 0, 'a gear must spin the opposite way to a tire');
+});
+
+// --- pads --------------------------------------------------------------
+
+/** Find the first field prop index at or after `from` with the given kind. */
+function findKind(field, kind, from = 0) {
+  for (let i = from; ; i++) {
+    if (field.propAt(i).kind === kind) return i;
+  }
+}
+
+test('a pad bounce sets vy up, preserves vx, and leaves phase fly with no input', () => {
+  const f = makeField(1);
+  const padIdx = findKind(f, 'pad');
+  const pad = f.propAt(padIdx);
+  let s = createRun(f, VH);
+  s = { ...s, phase: 'fly', x: pad.x, y: pad.y, vx: 37, vy: -5, lockWheel: -1, wasPressed: false };
+  s = step(s, f, DT, false, VH);
+  assert.equal(s.phase, 'fly', 'a pad bounce must not attach');
+  assert.equal(s.vy, PROPS.padBounce);
+  assert.equal(s.vx, 37, 'a pad must not touch horizontal velocity');
+  assert.equal(s.lastWheelY, pad.y, 'a pad still counts as upward progress');
+});
+
+test('a pad does not increment chain, mult, or feathers', () => {
+  const f = makeField(1);
+  const padIdx = findKind(f, 'pad');
+  const pad = f.propAt(padIdx);
+  let s = createRun(f, VH);
+  s = { ...s, phase: 'fly', chain: 4, mult: 2, feathers: 9, x: pad.x, y: pad.y, vx: 0, vy: 0, lockWheel: -1, wasPressed: false };
+  s = step(s, f, DT, false, VH);
+  assert.equal(s.chain, 4, 'a pad must not build the chain');
+  assert.equal(s.mult, 2, 'a pad must not build the multiplier');
+  assert.equal(s.feathers, 9, 'a pad grants no feathers');
+});
+
+test('a pad in lockWheel does not re-fire every frame while still in contact', () => {
+  const f = makeField(1);
+  const padIdx = findKind(f, 'pad');
+  const pad = f.propAt(padIdx);
+  let s = createRun(f, VH);
+  s = { ...s, phase: 'fly', x: pad.x, y: pad.y, vx: 0, vy: -5, lockWheel: -1, wasPressed: false };
+  s = step(s, f, DT, false, VH);
+  assert.equal(s.lockWheel, padIdx, 'the pad must lock itself out on bounce');
+  assert.equal(s.vy, PROPS.padBounce);
+  // Still sitting inside the pad's radius next frame: must not bounce again.
+  const vyAfterGravity = s.vy - PHYSICS.gravity * DT;
+  s = { ...s, x: pad.x, y: pad.y };
+  s = step(s, f, DT, false, VH);
+  assert.ok(Math.abs(s.vy - vyAfterGravity) < 1e-9, 'a locked pad must not re-fire');
+});
+
+test('a pad never appears in the grab candidate list — it is never grabbable', () => {
+  const f = makeField(1);
+  const padIdx = findKind(f, 'pad');
+  const pad = f.propAt(padIdx);
+  let s = createRun(f, VH);
+  // Sit exactly on the pad's would-be orbit annulus, at rest, as if trying to grab it.
+  s = { ...s, phase: 'fly', x: pad.x + PHYSICS.orbitRadius, y: pad.y, vx: 0, vy: 0, lockWheel: -1, wasPressed: false };
+  s = step(s, f, DT, false, VH);
+  assert.notEqual(s.phase, 'orbit', 'a pad must never be grabbed like a tire');
+});
+
+// --- gears --------------------------------------------------------------
+
+test('a gear grab attaches and increments chain like a tire', () => {
+  const f = makeField(1);
+  const gearIdx = findKind(f, 'gear');
+  const gear = f.propAt(gearIdx);
+  let s = createRun(f, VH);
+  s = {
+    ...s,
+    phase: 'fly',
+    x: gear.x + radiusOf('gear'),
+    y: gear.y,
+    vx: 0,
+    vy: 0,
+    lockWheel: -1,
+    wasPressed: false,
+  };
+  s = step(s, f, DT, false, VH);
+  assert.equal(s.phase, 'orbit');
+  assert.equal(s.wheelIndex, gearIdx);
+  assert.equal(s.chain, 1);
+  assert.equal(s.feathers, 1);
+});
+
+test('a gear launches with the opposite horizontal direction to a tire at the same angle', () => {
+  const f = makeField(1);
+  const gearIdx = findKind(f, 'gear');
+  let s = createRun(f, VH);
+  s = { ...s, phase: 'orbit', wheelIndex: gearIdx, angle: 0.7, wasPressed: false };
+  const launched = step(s, f, DT, true, VH);
+  assert.equal(launched.phase, 'fly');
+
+  // A tire at the very same angle, for comparison.
+  let t = createRun(f, VH);
+  t = { ...t, phase: 'orbit', wheelIndex: 0, angle: 0.7, wasPressed: false };
+  const tireLaunched = step(t, f, DT, true, VH);
+
+  assert.ok(
+    Math.sign(launched.vx) !== Math.sign(tireLaunched.vx),
+    'a gear must launch horizontally opposite to a tire released at the same angle',
+  );
 });
