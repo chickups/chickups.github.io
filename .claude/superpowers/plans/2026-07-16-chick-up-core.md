@@ -104,12 +104,18 @@ The source components live in the Claude Design project and are reproduced verba
 
 No `dependencies` key, no `devDependencies` key. This is deliberate and permanent.
 
-- [ ] **Step 2: Create `.gitignore`**
+- [ ] **Step 2: Extend `.gitignore`**
+
+`.gitignore` already exists and already ignores `.claude/worktrees/` — do not
+overwrite it. **Append** these two lines, leaving the existing rule intact:
 
 ```
 .DS_Store
 node_modules/
 ```
+
+Verify with `cat .gitignore`. Expected: three rules — `.claude/worktrees/`,
+`.DS_Store`, `node_modules/`.
 
 - [ ] **Step 3: Create `src/core/tokens.js`**
 
@@ -2824,12 +2830,17 @@ export const TAP_MIN = 44;
  * @param {number} lip shadow depth in points
  */
 function pressable(node, lip) {
+  // Capture both states once, at rest. Recomputing the pressed shadow from the
+  // live style would compound: press twice and the lip is gone for good.
+  const restShadow = node.style.boxShadow;
+  const pressShadow = restShadow.replace(/0 [\d.]+px 0/, '0 0px 0');
   node.addEventListener('pointerdown', () => {
     node.style.transform = `translateY(${px(lip)})`;
-    node.style.boxShadow = node.style.boxShadow.replace(/0 \d+(\.\d+)?px 0/, '0 0px 0');
+    node.style.boxShadow = pressShadow;
   });
   const release = () => {
     node.style.transform = 'translateY(0px)';
+    node.style.boxShadow = restShadow;
   };
   node.addEventListener('pointerup', release);
   node.addEventListener('pointerleave', release);
@@ -2861,7 +2872,7 @@ export function primaryButton(label, glyph, onTap, opts = {}) {
       borderRadius: px(34),
       boxShadow: disabled
         ? 'none'
-        : `0 ${px(lip)}px 0 ${COLORS.goldD}, 0 ${px(lip * 2)}px ${px(24)} rgba(75,53,36,.28)`,
+        : `0 ${px(lip)} 0 ${COLORS.goldD}, 0 ${px(lip * 2)} ${px(24)} rgba(75,53,36,.28)`,
       transition: 'transform .08s',
     },
     glyph ? icon(glyph, size * 0.87, disabled ? '#9c8f7a' : COLORS.ink) : null,
@@ -2921,6 +2932,22 @@ export function pill(glyph, text, color = COLORS.ink) {
     },
     icon(glyph, 16, color),
     el('span', { font: `800 ${px(16)} 'Baloo 2'`, color }, text),
+  );
+}
+
+/**
+ * A labelled stat tile — SCORE / BEST / MULT. Used by Pause and Oops!.
+ * @param {string} label
+ * @param {string} value
+ * @param {number} [size] font size of the value, in points
+ * @returns {HTMLElement}
+ */
+export function statTile(label, value, size = 40) {
+  return el(
+    'div',
+    { flex: '1', background: COLORS.creamDeep, borderRadius: px(20), padding: px(12), textAlign: 'center' },
+    el('div', { font: `700 ${px(12)} 'Nunito'`, color: COLORS.muted, letterSpacing: '.06em' }, label),
+    el('div', { font: `800 ${px(size)} 'Baloo 2'`, color: COLORS.ink, lineHeight: '1.1' }, value),
   );
 }
 
@@ -3492,7 +3519,7 @@ git commit -m "feat: add HUD and playable game screen with tuned physics"
 ```js
 // @ts-check
 import { el, px } from '../el.js';
-import { primaryButton, secondaryButton } from '../ui.js';
+import { primaryButton, secondaryButton, statTile } from '../ui.js';
 import { COLORS } from '../../core/tokens.js';
 import { scoreOf } from '../../core/run.js';
 
@@ -3503,18 +3530,6 @@ import { scoreOf } from '../../core/run.js';
  */
 export function pauseScreen(go, arg) {
   const s = arg.state;
-
-  /**
-   * @param {string} label
-   * @param {string} value
-   */
-  const stat = (label, value) =>
-    el(
-      'div',
-      { flex: '1', background: COLORS.creamDeep, borderRadius: px(20), padding: px(12), textAlign: 'center' },
-      el('div', { font: `700 ${px(12)} 'Nunito'`, color: COLORS.muted, letterSpacing: '.06em' }, label),
-      el('div', { font: `800 ${px(32)} 'Baloo 2'`, color: COLORS.ink, lineHeight: '1.1' }, value),
-    );
 
   return el(
     'div',
@@ -3534,8 +3549,8 @@ export function pauseScreen(go, arg) {
       el(
         'div',
         { display: 'flex', gap: px(10), margin: `${px(18)} 0` },
-        stat('SCORE', String(scoreOf(s))),
-        stat('MULT.', `×${s.mult}`),
+        statTile('SCORE', String(scoreOf(s)), 32),
+        statTile('MULT.', `×${s.mult}`, 32),
       ),
       primaryButton('Resume', 'play', () => go('game'), { size: 24, lip: 6 }),
       el('div', { height: px(12) }),
@@ -3557,7 +3572,7 @@ export function pauseScreen(go, arg) {
 import { el, px } from '../el.js';
 import { peep } from '../art/peep.js';
 import { icon } from '../art/icon.js';
-import { primaryButton, secondaryButton } from '../ui.js';
+import { primaryButton, secondaryButton, statTile } from '../ui.js';
 import { COLORS } from '../../core/tokens.js';
 
 /**
@@ -3567,18 +3582,6 @@ import { COLORS } from '../../core/tokens.js';
  * @returns {HTMLElement}
  */
 export function oopsScreen(go, arg) {
-  /**
-   * @param {string} label
-   * @param {string} value
-   */
-  const stat = (label, value) =>
-    el(
-      'div',
-      { flex: '1', background: COLORS.creamDeep, borderRadius: px(20), padding: px(12), textAlign: 'center' },
-      el('div', { font: `700 ${px(12)} 'Nunito'`, color: COLORS.muted, letterSpacing: '.06em' }, label),
-      el('div', { font: `800 ${px(40)} 'Baloo 2'`, color: COLORS.ink, lineHeight: '1.1' }, value),
-    );
-
   return el(
     'div',
     {
@@ -3606,7 +3609,7 @@ export function oopsScreen(go, arg) {
       },
       el('div', { textAlign: 'center', font: `800 ${px(40)} 'Baloo 2'`, color: COLORS.ink, lineHeight: '1' }, 'Oops!'),
       el('div', { textAlign: 'center', font: `700 ${px(15)} 'Nunito'`, color: COLORS.orangeD, margin: `${px(4)} 0 ${px(18)}` }, 'One more flap?'),
-      el('div', { display: 'flex', gap: px(14), marginBottom: px(14) }, stat('SCORE', String(arg.score)), stat('BEST', String(arg.best))),
+      el('div', { display: 'flex', gap: px(14), marginBottom: px(14) }, statTile('SCORE', String(arg.score)), statTile('BEST', String(arg.best))),
       el(
         'div',
         { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: px(6), marginBottom: px(16) },
