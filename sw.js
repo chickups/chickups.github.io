@@ -2,7 +2,7 @@
 /* Service worker. Cache-first: the game is fully static, so once installed it
    works offline permanently. Bump CACHE on every deploy to invalidate. */
 
-const CACHE = 'chickup-v2';
+const CACHE = 'chickup-v3';
 
 /** Everything needed to run with no network at all. */
 const PRECACHE = [
@@ -18,15 +18,25 @@ const PRECACHE = [
   './src/core/rng.js',
   './src/core/physics.js',
   './src/core/field.js',
+  './src/core/biome.js',
+  './src/core/zones.js',
   './src/core/run.js',
+  './src/core/daily.js',
+  './src/core/ghost.js',
+  './src/core/shop.js',
+  './src/core/achievements.js',
   './src/render/el.js',
   './src/render/styles.js',
   './src/render/ui.js',
   './src/render/hud.js',
   './src/render/art/peep.js',
   './src/render/art/tire.js',
+  './src/render/art/gear.js',
+  './src/render/art/pad.js',
+  './src/render/art/updraft.js',
   './src/render/art/gamebg.js',
   './src/render/art/truck.js',
+  './src/render/art/hazardTruck.js',
   './src/render/art/logo.js',
   './src/render/art/icon.js',
   './src/render/screens/router.js',
@@ -37,6 +47,9 @@ const PRECACHE = [
   './src/render/screens/pause.js',
   './src/render/screens/oops.js',
   './src/render/screens/best.js',
+  './src/render/screens/journey.js',
+  './src/render/screens/shop.js',
+  './src/render/screens/achievements.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable-512.png',
@@ -74,7 +87,15 @@ self.addEventListener('fetch', (event) => {
           }
           return res;
         })
-        .catch(() => caches.match('./index.html'));
+        .catch(() => {
+          // Only a NAVIGATION may fall back to the shell. Handing index.html to a
+          // failed script request makes the browser report a MIME-type error
+          // ("expected a JavaScript module, got text/html") that says nothing about
+          // the real problem, and turns one missing module into a mystery. Let
+          // non-navigation misses fail as themselves.
+          if (req.mode === 'navigate') return caches.match('./index.html');
+          return Response.error();
+        });
     }),
   );
 });
