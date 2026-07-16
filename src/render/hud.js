@@ -45,7 +45,7 @@ export function makeHud(onPause) {
     display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
   }, icon('pause', 20, COLORS.ink));
   pause.addEventListener('pointerdown', (e) => {
-    e.stopPropagation(); // must not read as a game hold
+    e.stopPropagation(); // must not read as a game tap
     onPause();
   });
 

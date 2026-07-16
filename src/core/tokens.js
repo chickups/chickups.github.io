@@ -32,31 +32,56 @@ export const COLORS = Object.freeze({
  * They are gathered here because they WILL need play-testing. This is the tuning surface.
  */
 export const PHYSICS = Object.freeze({
-  /** rad/s. ~1.05s per revolution. */
-  orbitRate: 10.0,
+  /**
+   * rad/s. ~1.05s per revolution.
+   * Not a free knob: launch speed is `orbitRate * orbitRadius`, so this also
+   * sets how far Peep can climb. Slowing the spin without also shrinking
+   * FIELD.gapStart makes the game unwinnable. See the tuning note below.
+   */
+  orbitRate: 6.0,
   /** pt. The prototype's `R = 62`. */
   orbitRadius: 62,
   /** pt. Half-width of the annulus in which a grab registers. */
-  grabTolerance: 22,
+  grabTolerance: 28,
   /** Scales launch speed away from the true tangential speed. 1.0 = physically honest. */
   launchBoost: 1.0,
   /** pt/s^2, positive; applied downward. */
-  gravity: 500,
+  gravity: 280,
   /** pt. The prototype's `PEEP = 64`. Render size only; not used for collision. */
   peepSize: 64,
 });
 
+/**
+ * TUNING NOTE — the one equation that governs playability.
+ *
+ *   launch speed  v    = orbitRate * orbitRadius * launchBoost
+ *   max rise           = v^2 / (2 * gravity)
+ *
+ * The binding constraint is VERTICAL CLIMB: `max rise` must exceed `gapMax`
+ * with margin, or the field eventually grows a gap Peep cannot clear and the
+ * run ends in a wall no skill can pass. It is NOT the 45-degree range (v^2/g,
+ * which is horizontal) — assuming that produced an unwinnable build once.
+ *
+ * At orbitRate 6.0 / gravity 280: v = 372, max rise = 247pt.
+ * gapMax 200 therefore keeps a 1.24x margin at maximum difficulty.
+ *
+ * Difficulty is really the RELEASE WINDOW: the arc of release angles that
+ * land a grab, divided by spin rate. Measured at these values: 119ms at
+ * gapStart, narrowing to 95ms at gapMax. Below ~70ms the game reads as
+ * unfair. Raising orbitRate shrinks that window twice over — fewer viable
+ * degrees, sweeping past faster.
+ */
 export const FIELD = Object.freeze({
   /** The prototype's alternating 118 / 236 columns. */
   columns: [118, 236],
   /** pt of seeded horizontal jitter, +/-. */
   jitter: 28,
-  /** pt. The prototype's `GAP = 250`. */
-  gapStart: 250,
+  /** pt. Scaled down with orbitRate to hold the climb margin; see TUNING NOTE. */
+  gapStart: 160,
   /** Extra pt of gap per pt of height climbed. Difficulty ramps ONLY via spacing (doc §13). */
-  gapGrowth: 0.06,
-  /** pt. Ceiling on gap so the game stays possible. */
-  gapMax: 420,
+  gapGrowth: 0.015,
+  /** pt. Ceiling on gap. MUST stay below `max rise` (247pt) or the ramp walls off. */
+  gapMax: 200,
 });
 
 export const SCORING = Object.freeze({

@@ -21,8 +21,7 @@ import { orbitPosition, stepOrbit, launchVelocity, stepFly, findGrab } from './p
  * @property {number} feathers     banked this run
  * @property {number} lastWheelY   y of the wheel last launched from; chain-break threshold
  * @property {number} lockWheel    wheel index that cannot be re-grabbed yet, or -1
- * @property {boolean} wasHolding  previous frame's input, for edge detection
- * @property {boolean} everHeld
+ * @property {boolean} wasPressed  previous frame's input, for tap edge detection
  * @property {boolean} everLaunched
  * @property {boolean} everGrabbed
  */
@@ -52,8 +51,7 @@ export function createRun(field, viewportH) {
     feathers: 0,
     lastWheelY: wheel.y,
     lockWheel: -1,
-    wasHolding: false,
-    everHeld: false,
+    wasPressed: false,
     everLaunched: false,
     everGrabbed: false,
   };
@@ -61,27 +59,30 @@ export function createRun(field, viewportH) {
 
 /**
  * Advance the run by one frame. Pure: returns a new state.
+ *
+ * One verb: TAP. Peep orbits on his own, a tap launches him, and landing on a
+ * wheel re-attaches automatically. `pressed` is the raw button state; the tap
+ * edge is derived here rather than in the input layer so that the whole verb
+ * lives in core/ and ports with it.
+ *
  * @param {RunState} state
  * @param {Field} field
  * @param {number} dt seconds
- * @param {boolean} holding
+ * @param {boolean} pressed raw input: is the button down this frame?
  * @param {number} viewportH points
  * @returns {RunState}
  */
-export function step(state, field, dt, holding, viewportH) {
+export function step(state, field, dt, pressed, viewportH) {
   if (state.phase === 'dead') return state;
 
   const s = { ...state };
-  if (holding) s.everHeld = true;
+  const tapped = pressed && !s.wasPressed;
 
   if (s.phase === 'orbit') {
     const wheel = field.wheelAt(s.wheelIndex);
-    if (holding) {
-      s.angle = stepOrbit(s.angle, dt, PHYSICS.orbitRate);
-      const p = orbitPosition(wheel, s.angle, PHYSICS.orbitRadius);
-      s.x = p.x;
-      s.y = p.y;
-    } else if (s.wasHolding) {
+    if (tapped) {
+      // Launch from the angle the player actually saw when they tapped, rather
+      // than one frame further along.
       const v = launchVelocity(s.angle, PHYSICS.orbitRate, PHYSICS.orbitRadius, PHYSICS.launchBoost);
       s.vx = v.x;
       s.vy = v.y;
@@ -89,6 +90,12 @@ export function step(state, field, dt, holding, viewportH) {
       s.lastWheelY = wheel.y;
       s.lockWheel = s.wheelIndex;
       s.everLaunched = true;
+    } else {
+      // The tire spins by itself; staying on is not something the player sustains.
+      s.angle = stepOrbit(s.angle, dt, PHYSICS.orbitRate);
+      const p = orbitPosition(wheel, s.angle, PHYSICS.orbitRadius);
+      s.x = p.x;
+      s.y = p.y;
     }
   } else if (s.phase === 'fly') {
     const f = stepFly({ x: s.x, y: s.y, vx: s.vx, vy: s.vy }, dt, PHYSICS.gravity);
@@ -112,29 +119,29 @@ export function step(state, field, dt, holding, viewportH) {
       if (Math.hypot(s.x - lw.x, s.y - lw.y) > band) s.lockWheel = -1;
     }
 
-    if (holding) {
-      const entries = field
-        .wheelsInRange(s.y - band, s.y + band)
-        .filter((e) => e.index !== s.lockWheel);
-      const hit = findGrab({ x: s.x, y: s.y }, entries, PHYSICS.orbitRadius, PHYSICS.grabTolerance);
-      if (hit) {
-        const wheel = field.wheelAt(hit.index);
-        const p = orbitPosition(wheel, hit.angle, PHYSICS.orbitRadius);
-        s.phase = 'orbit';
-        s.wheelIndex = hit.index;
-        s.angle = hit.angle;
-        s.x = p.x;
-        s.y = p.y;
-        s.vx = 0;
-        s.vy = 0;
-        s.lockWheel = -1;
-        s.chain += 1;
-        if (s.chain % SCORING.chainPerMult === 0) {
-          s.mult = Math.min(SCORING.multMax, s.mult + 1);
-        }
-        s.feathers += s.mult;
-        s.everGrabbed = true;
+    // Touching a wheel's band attaches automatically — the player times the
+    // launch, never the catch.
+    const entries = field
+      .wheelsInRange(s.y - band, s.y + band)
+      .filter((e) => e.index !== s.lockWheel);
+    const hit = findGrab({ x: s.x, y: s.y }, entries, PHYSICS.orbitRadius, PHYSICS.grabTolerance);
+    if (hit) {
+      const wheel = field.wheelAt(hit.index);
+      const p = orbitPosition(wheel, hit.angle, PHYSICS.orbitRadius);
+      s.phase = 'orbit';
+      s.wheelIndex = hit.index;
+      s.angle = hit.angle;
+      s.x = p.x;
+      s.y = p.y;
+      s.vx = 0;
+      s.vy = 0;
+      s.lockWheel = -1;
+      s.chain += 1;
+      if (s.chain % SCORING.chainPerMult === 0) {
+        s.mult = Math.min(SCORING.multMax, s.mult + 1);
       }
+      s.feathers += s.mult;
+      s.everGrabbed = true;
     }
   }
 
@@ -143,7 +150,7 @@ export function step(state, field, dt, holding, viewportH) {
   if (desiredCamera > s.cameraY) s.cameraY = desiredCamera;
   if (s.y < s.cameraY) s.phase = 'dead';
 
-  s.wasHolding = holding;
+  s.wasPressed = pressed;
   return s;
 }
 

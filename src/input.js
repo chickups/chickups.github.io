@@ -1,13 +1,14 @@
 // @ts-check
 
 /**
- * Reduce all pointer and keyboard input to one boolean: is the player holding?
- * That boolean is the entire interface between the player and core/.
+ * Reduce all pointer and keyboard input to one boolean: is the button down?
+ * That boolean is the entire interface between the player and core/. Core
+ * derives the tap edge from it, so this layer stays free of game meaning.
  *
  * Pointer events cover touch, mouse and pen in a single path.
  *
  * @param {HTMLElement|Window} target
- * @returns {{isHolding: () => boolean, dispose: () => void}}
+ * @returns {{isPressed: () => boolean, dispose: () => void}}
  */
 export function makeInput(target) {
   let pointers = 0;
@@ -30,7 +31,7 @@ export function makeInput(target) {
   window.addEventListener('blur', blur);
 
   return {
-    isHolding: () => pointers > 0 || key,
+    isPressed: () => pointers > 0 || key,
     dispose() {
       target.removeEventListener('pointerdown', down);
       window.removeEventListener('pointerup', up);

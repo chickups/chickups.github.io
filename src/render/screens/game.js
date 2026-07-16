@@ -16,8 +16,8 @@ const WHEEL_SIZE = PHYSICS.orbitRadius * 2;
 const DEG = 180 / Math.PI;
 
 /** Tip copy, verbatim from doc §04. */
-const TIP_HOLD = 'Hold to run around';
-const TIP_RELEASE = 'Release to launch → keep moving up!';
+const TIP_TAP = 'Tap to launch!';
+const TIP_LAND = 'Land on a tire to keep climbing';
 
 /**
  * @param {(name: string, arg?: any) => void} go
@@ -124,8 +124,8 @@ export function gameScreen(go) {
       `translate(${px(state.x - PHYSICS.peepSize / 2)},${px(-state.y - PHYSICS.peepSize / 2)}) rotate(${rotation}deg)`;
 
     let tip = '';
-    if (!state.everHeld) tip = TIP_HOLD;
-    else if (!state.everGrabbed) tip = TIP_RELEASE;
+    if (!state.everLaunched) tip = TIP_TAP;
+    else if (!state.everGrabbed) tip = TIP_LAND;
     hud.update(scoreOf(state), state.mult, tip);
   }
 
@@ -144,7 +144,7 @@ export function gameScreen(go) {
     if (dt > 0.05) dt = 0.05;
 
     const h = viewportPoints().h;
-    state = step(state, field, dt, input.isHolding(), h);
+    state = step(state, field, dt, input.isPressed(), h);
 
     if (state.phase === 'fly' && prevPhase === 'orbit') medium();
     if (state.phase === 'orbit' && prevPhase === 'fly') tap();

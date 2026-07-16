@@ -9,13 +9,13 @@ const VH = 852;
 const DT = 1 / 60;
 
 /** Drive the sim for n frames with a constant input. */
-function run(state, field, n, holding) {
+function run(state, field, n, pressed) {
   let s = state;
-  for (let i = 0; i < n; i++) s = step(s, field, DT, holding, VH);
+  for (let i = 0; i < n; i++) s = step(s, field, DT, pressed, VH);
   return s;
 }
 
-test('a new run starts attached to wheel 0, not holding, chain 0, mult 1', () => {
+test('a new run starts attached to wheel 0, unpressed, chain 0, mult 1', () => {
   const f = makeField(1);
   const s = createRun(f, VH);
   assert.equal(s.phase, 'orbit');
@@ -23,56 +23,60 @@ test('a new run starts attached to wheel 0, not holding, chain 0, mult 1', () =>
   assert.equal(s.chain, 0);
   assert.equal(s.mult, 1);
   assert.equal(s.feathers, 0);
-  assert.equal(s.wasHolding, false);
+  assert.equal(s.wasPressed, false);
   assert.equal(scoreOf(s), 0);
 });
 
-test('holding advances the orbit angle; not holding does not', () => {
+test('the tire spins with no input at all', () => {
   const f = makeField(1);
   const start = createRun(f, VH);
-  const held = step(start, f, DT, true, VH);
-  assert.ok(held.angle > start.angle);
   const idle = step(start, f, DT, false, VH);
-  assert.equal(idle.angle, start.angle);
+  assert.ok(idle.angle > start.angle, 'orbit must advance unprompted');
   assert.equal(idle.phase, 'orbit');
 });
 
-test('releasing without ever holding does not launch', () => {
+test('a tap launches into flight', () => {
   const f = makeField(1);
-  const s = run(createRun(f, VH), f, 30, false);
-  assert.equal(s.phase, 'orbit');
-});
-
-test('release after holding launches into flight', () => {
-  const f = makeField(1);
-  let s = run(createRun(f, VH), f, 10, true);
-  assert.equal(s.phase, 'orbit');
-  s = step(s, f, DT, false, VH);
+  const start = run(createRun(f, VH), f, 10, false);
+  const s = step(start, f, DT, true, VH);
   assert.equal(s.phase, 'fly');
   assert.ok(Math.hypot(s.vx, s.vy) > 0);
 });
 
-test('flying without holding never grabs — Peep sails past', () => {
+test('holding the button launches once, not every frame', () => {
   const f = makeField(1);
-  let s = run(createRun(f, VH), f, 10, true);
-  s = step(s, f, DT, false, VH);
-  s = run(s, f, 600, false);
-  assert.notEqual(s.phase, 'orbit');
-  assert.equal(s.chain, 0);
+  let s = step(createRun(f, VH), f, DT, true, VH);
+  assert.equal(s.phase, 'fly');
+  const vx = s.vx;
+  const vy = s.vy;
+  // Still pressed: no new tap edge, so no second launch impulse.
+  s = step(s, f, DT, true, VH);
+  assert.ok(s.vy < vy, 'gravity must be the only thing changing velocity');
+  assert.equal(s.vx, vx);
 });
 
-test('a grab increments the chain and banks feathers equal to the multiplier', () => {
+test('a landing grabs automatically, with no input', () => {
   const f = makeField(1);
-  // Place Peep in flight right on wheel 1's orbit circle, holding.
   const w1 = f.wheelAt(1);
   let s = createRun(f, VH);
-  s = { ...s, phase: 'fly', x: w1.x + PHYSICS.orbitRadius, y: w1.y, vx: 0, vy: 0, lockWheel: -1, wasHolding: false };
-  s = step(s, f, DT, true, VH);
-  assert.equal(s.phase, 'orbit');
+  s = { ...s, phase: 'fly', x: w1.x + PHYSICS.orbitRadius, y: w1.y, vx: 0, vy: 0, lockWheel: -1, wasPressed: false };
+  s = step(s, f, DT, false, VH);
+  assert.equal(s.phase, 'orbit', 'must glue on contact without being asked');
   assert.equal(s.wheelIndex, 1);
   assert.equal(s.chain, 1);
   assert.equal(s.mult, 1);
   assert.equal(s.feathers, 1);
+});
+
+test('landing while still holding does not immediately re-launch', () => {
+  const f = makeField(1);
+  const w1 = f.wheelAt(1);
+  let s = createRun(f, VH);
+  s = { ...s, phase: 'fly', x: w1.x + PHYSICS.orbitRadius, y: w1.y, vx: 0, vy: 0, lockWheel: -1, wasPressed: true };
+  s = step(s, f, DT, true, VH);
+  assert.equal(s.phase, 'orbit');
+  s = step(s, f, DT, true, VH);
+  assert.equal(s.phase, 'orbit', 'a held button is not a fresh tap');
 });
 
 test('multiplier steps every chainPerMult grabs and caps at multMax', () => {
@@ -82,8 +86,8 @@ test('multiplier steps every chainPerMult grabs and caps at multMax', () => {
   let expectedMult = 1;
   for (let grab = 1; grab <= 20; grab++) {
     const w = f.wheelAt(grab);
-    s = { ...s, phase: 'fly', x: w.x + PHYSICS.orbitRadius, y: w.y, vx: 0, vy: 0, lockWheel: -1, wasHolding: false };
-    s = step(s, f, DT, true, VH);
+    s = { ...s, phase: 'fly', x: w.x + PHYSICS.orbitRadius, y: w.y, vx: 0, vy: 0, lockWheel: -1, wasPressed: false };
+    s = step(s, f, DT, false, VH);
     if (grab % SCORING.chainPerMult === 0) expectedMult = Math.min(SCORING.multMax, expectedMult + 1);
     feathers += expectedMult;
     assert.equal(s.chain, grab, `chain wrong after grab ${grab}`);
@@ -95,12 +99,11 @@ test('multiplier steps every chainPerMult grabs and caps at multMax', () => {
 
 test('the wheel just launched from cannot be instantly re-grabbed', () => {
   const f = makeField(1);
-  let s = run(createRun(f, VH), f, 10, true);
-  s = step(s, f, DT, false, VH); // launch
+  let s = step(createRun(f, VH), f, DT, true, VH); // tap -> launch
   assert.equal(s.phase, 'fly');
   assert.equal(s.lockWheel, 0);
-  // Immediately hold again while still inside wheel 0's band.
-  s = step(s, f, DT, true, VH);
+  // Peep is still sitting inside wheel 0's band; auto-glue must not take it back.
+  s = step(s, f, DT, false, VH);
   assert.equal(s.phase, 'fly', 'must not re-grab the wheel it just left');
   assert.equal(s.chain, 0);
 });
@@ -122,7 +125,7 @@ test('chain breaks when Peep falls below the wheel he last left', () => {
 test('maxY is a high-water mark and never falls', () => {
   const f = makeField(1);
   let s = createRun(f, VH);
-  s = { ...s, phase: 'fly', vx: 0, vy: 400, lockWheel: -1 };
+  s = { ...s, phase: 'fly', x: 0, vx: 0, vy: 400, lockWheel: -1 };
   let peak = -Infinity;
   for (let i = 0; i < 300; i++) {
     s = step(s, f, DT, false, VH);
@@ -134,7 +137,7 @@ test('maxY is a high-water mark and never falls', () => {
 test('the camera never descends', () => {
   const f = makeField(1);
   let s = createRun(f, VH);
-  s = { ...s, phase: 'fly', vx: 0, vy: 400, lockWheel: -1 };
+  s = { ...s, phase: 'fly', x: 0, vx: 0, vy: 400, lockWheel: -1 };
   let cam = -Infinity;
   for (let i = 0; i < 300; i++) {
     s = step(s, f, DT, false, VH);
@@ -146,7 +149,7 @@ test('the camera never descends', () => {
 test('falling below the camera ends the run, and a dead run stops changing', () => {
   const f = makeField(1);
   let s = createRun(f, VH);
-  s = { ...s, phase: 'fly', vx: 0, vy: -2000, lockWheel: -1 };
+  s = { ...s, phase: 'fly', x: 0, vx: 0, vy: -2000, lockWheel: -1 };
   s = run(s, f, 600, false);
   assert.equal(s.phase, 'dead');
   const frozen = step(s, f, DT, true, VH);
@@ -176,10 +179,9 @@ test('score never decreases across a whole run', () => {
 test('tutorial flags latch as the player performs each action', () => {
   const f = makeField(1);
   let s = createRun(f, VH);
-  assert.equal(s.everHeld, false);
-  s = run(s, f, 5, true);
-  assert.equal(s.everHeld, true);
   assert.equal(s.everLaunched, false);
-  s = step(s, f, DT, false, VH);
+  s = run(s, f, 5, false);
+  assert.equal(s.everLaunched, false, 'spinning alone is not launching');
+  s = step(s, f, DT, true, VH);
   assert.equal(s.everLaunched, true);
 });
