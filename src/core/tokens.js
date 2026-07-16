@@ -32,8 +32,8 @@ export const COLORS = Object.freeze({
  * They are gathered here because they WILL need play-testing. This is the tuning surface.
  */
 export const PHYSICS = Object.freeze({
-  /** rad/s. The prototype's `angle += 2.7*dt`. */
-  orbitRate: 2.7,
+  /** rad/s. ~1.05s per revolution. */
+  orbitRate: 10.0,
   /** pt. The prototype's `R = 62`. */
   orbitRadius: 62,
   /** pt. Half-width of the annulus in which a grab registers. */
@@ -41,7 +41,7 @@ export const PHYSICS = Object.freeze({
   /** Scales launch speed away from the true tangential speed. 1.0 = physically honest. */
   launchBoost: 1.0,
   /** pt/s^2, positive; applied downward. */
-  gravity: 900,
+  gravity: 500,
   /** pt. The prototype's `PEEP = 64`. Render size only; not used for collision. */
   peepSize: 64,
 });
