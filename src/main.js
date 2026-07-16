@@ -6,6 +6,9 @@ import { splashScreen } from './render/screens/splash.js';
 import { introScreen } from './render/screens/intro.js';
 import { homeScreen } from './render/screens/home.js';
 import { gameScreen } from './render/screens/game.js';
+import { pauseScreen } from './render/screens/pause.js';
+import { oopsScreen } from './render/screens/oops.js';
+import { bestScreen } from './render/screens/best.js';
 
 const stage = /** @type {HTMLElement} */ (document.getElementById('stage'));
 installViewport(stage);
@@ -16,22 +19,9 @@ registerScreens(stage, {
   intro: introScreen,
   home: homeScreen,
   game: gameScreen,
-  // Temporary placeholders until Task 12 lands the real screens.
-  pause: (goTo) => { goTo('home'); return document.createElement('div'); },
-  oops: (goTo, arg) => {
-    const d = document.createElement('div');
-    d.textContent = `Oops! ${arg.score} m — tap for home`;
-    d.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:800 24px Nunito;background:#A6DCF6;cursor:pointer';
-    d.addEventListener('pointerdown', () => goTo('home'));
-    return d;
-  },
-  best: (goTo, arg) => {
-    const d = document.createElement('div');
-    d.textContent = `NEW BEST ${arg.score} m — tap for home`;
-    d.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:800 24px Nunito;background:#FFB43A;cursor:pointer';
-    d.addEventListener('pointerdown', () => goTo('home'));
-    return d;
-  },
+  pause: pauseScreen,
+  oops: oopsScreen,
+  best: bestScreen,
 });
 
 go('splash');
