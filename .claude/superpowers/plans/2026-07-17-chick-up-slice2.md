@@ -322,8 +322,20 @@ git add -A && git commit -m "feat: trucks, the second failure condition"
 ## Task 5: Render the new props
 
 **Files:**
-- Create: `src/render/art/pad.js`, `src/render/art/gear.js`, `src/render/art/truck.js`, `src/render/art/updraft.js`
-- Modify: `src/render/screens/game.js`
+- ~~Create~~ **DONE (commit 420939e + fix 690c576)**: `src/render/art/pad.js`,
+  `src/render/art/gear.js`, `src/render/art/hazardTruck.js`, `src/render/art/updraft.js`
+- Modify: `src/render/screens/game.js` — still to do (this is "Task 5b")
+
+**CORRECTION:** this plan originally said to create `src/render/art/truck.js`. That file
+already existed — it is the rear-view truck full of chicks that left Peep behind, used by
+`intro.js` and `home.js`, and the premise of the game. Creating it clobbered the narrative
+truck; both call sites kept rendering (the new signature defaulted its 2nd argument) and
+just showed the wrong truck. `truck.js` is restored; the moving hazard is
+**`hazardTruck.js`**, exporting `hazardTruck(w, h, dir, animate)`. Import that, never
+`truck` from `truck.js`, for the hazard.
+
+The game loop is ALREADY converted to a fixed timestep (commit 690c576) — do not redo it.
+`FIXED_DT = 1/60`, accumulator, `MAX_TICKS = 5`, input polled once per tick.
 
 Match the existing art idiom in `src/render/art/tire.js` exactly: CSS divs via `el()`,
 colours from `COLORS` in `core/tokens.js`, **no new colour literals**.
@@ -432,12 +444,18 @@ export function makeRecorder(seed)  // -> { note(frameNo, tapped), finish(metres
 export function makeGhostPlayer(ghost) // -> { pressedAt(frameNo) -> boolean }
 ```
 
-**This only works on a fixed timestep.** The live loop uses a variable `dt` from rAF, so a
-recording of wall-clock taps will not reproduce. Task 9 must therefore convert the game
-loop to a **fixed-timestep accumulator** (`FIXED_DT = 1/60`, accumulate real time, step
-the core in whole ticks, cap at 5 ticks per frame to avoid a spiral of death). This also
-makes the physics frame-rate independent, which is a correctness win on 120Hz displays
-regardless of ghosts.
+**STATUS: `src/core/ghost.js` + tests are DONE (commit f2150de), and the fixed-timestep
+loop it depends on is DONE (commit 690c576).** Remaining is the render wiring only:
+record the live run, store the best one, and replay it as a translucent Peep.
+
+**This only works on a fixed timestep** — that is why the loop was converted first. A
+recording of wall-clock taps under rAF's variable `dt` does not reproduce.
+
+Beware when writing tests here: any tap pattern that is true at frame 0 launches Peep on
+his first frame from the spawn angle (top of the wheel, where the tangent is horizontal),
+so he sails sideways and dies at frame 100 having climbed 0m — identically for every seed.
+That non-run replays perfectly and proves nothing. Assert the recorded run climbed and
+died before trusting a replay. `ghost.test.js` uses `f % 71 === 42`, found by search.
 
 The ghost renders as a semi-transparent Peep replaying alongside the live run. Store only
 the best run's ghost (localStorage, capped — a long run is a few KB).
