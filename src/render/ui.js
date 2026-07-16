@@ -28,7 +28,7 @@ export const TAP_MIN = 44;
  * @param {string} pressShadow
  * @param {() => void} [onTap]
  */
-function pressable(node, lip, restShadow, pressShadow, onTap) {
+export function pressable(node, lip, restShadow, pressShadow, onTap) {
   let armed = false;
   node.addEventListener('pointerdown', () => {
     armed = true;

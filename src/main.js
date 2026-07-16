@@ -10,6 +10,8 @@ import { gameScreen } from './render/screens/game.js';
 import { pauseScreen } from './render/screens/pause.js';
 import { oopsScreen } from './render/screens/oops.js';
 import { bestScreen } from './render/screens/best.js';
+import { shopScreen } from './render/screens/shop.js';
+import { achievementsScreen } from './render/screens/achievements.js';
 
 const stage = /** @type {HTMLElement} */ (document.getElementById('stage'));
 installViewport(stage);
@@ -24,6 +26,8 @@ registerScreens(stage, {
   pause: pauseScreen,
   oops: oopsScreen,
   best: bestScreen,
+  shop: shopScreen,
+  achievements: achievementsScreen,
 });
 
 go('splash');

@@ -7,21 +7,23 @@ import { logo } from '../art/logo.js';
 import { icon } from '../art/icon.js';
 import { primaryButton, pill, card, TAP_MIN } from '../ui.js';
 import { COLORS } from '../../core/tokens.js';
-import { getFeathers, markIntroSeen } from '../../storage.js';
+import { getFeathers, markIntroSeen, getEquippedOutfit } from '../../storage.js';
 
 /**
- * A round entry point into the Journey map, tucked next to the (inert) settings
- * button so it does not disturb the Daily Run / Race a Ghost card row.
+ * A round top-bar entry point, matching the Journey button's style. Used for
+ * Journey, Shop and Achievements so all three read as one family of buttons.
+ * @param {string} glyph
  * @param {(name: string, arg?: any) => void} go
+ * @param {string} screen
  * @returns {HTMLElement}
  */
-function journeyButton(go) {
+function navButton(glyph, go, screen) {
   const node = el('div', {
     width: px(TAP_MIN), height: px(TAP_MIN), borderRadius: '50%',
     background: 'rgba(255,251,240,.92)', boxShadow: '0 3px 0 rgba(75,53,36,.12)',
     display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-  }, icon('map', 20, COLORS.orangeD));
-  node.addEventListener('click', () => go('journey'));
+  }, icon(glyph, 20, COLORS.orangeD));
+  node.addEventListener('click', () => go(screen));
   return node;
 }
 
@@ -61,7 +63,9 @@ export function homeScreen(go) {
       el(
         'div',
         { display: 'flex', gap: px(8) },
-        journeyButton(go),
+        navButton('map', go, 'journey'),
+        navButton('shirt', go, 'shop'),
+        navButton('trophy', go, 'achievements'),
         // Settings is designed but inert in slice 1.
         el('div', {
           width: px(TAP_MIN), height: px(TAP_MIN), borderRadius: '50%',
@@ -84,7 +88,11 @@ export function homeScreen(go) {
       el('span', { font: `800 ${px(14)} 'Nunito'`, color: COLORS.orangeD }, 'Catch up with the truck!'),
     ),
     el('div', { position: 'absolute', bottom: px(392), right: px(34) }, tire(72, 9)),
-    el('div', { position: 'absolute', bottom: px(398), left: px(48), zIndex: '4' }, peep(128, 'idle')),
+    el(
+      'div',
+      { position: 'absolute', bottom: px(398), left: px(48), zIndex: '4' },
+      peep(128, 'idle', /** @type {import('../art/peep.js').PeepOutfit} */ (getEquippedOutfit())),
+    ),
     el(
       'div',
       {
