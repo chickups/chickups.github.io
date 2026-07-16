@@ -5,7 +5,7 @@ import { tire } from '../art/tire.js';
 import { truck } from '../art/truck.js';
 import { logo } from '../art/logo.js';
 import { icon } from '../art/icon.js';
-import { primaryButton, pill, card } from '../ui.js';
+import { primaryButton, pill, card, TAP_MIN } from '../ui.js';
 import { COLORS } from '../../core/tokens.js';
 import { getFeathers, markIntroSeen } from '../../storage.js';
 
@@ -17,7 +17,7 @@ import { getFeathers, markIntroSeen } from '../../storage.js';
  */
 function journeyButton(go) {
   const node = el('div', {
-    width: px(42), height: px(42), borderRadius: '50%',
+    width: px(TAP_MIN), height: px(TAP_MIN), borderRadius: '50%',
     background: 'rgba(255,251,240,.92)', boxShadow: '0 3px 0 rgba(75,53,36,.12)',
     display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
   }, icon('map', 20, COLORS.orangeD));
@@ -64,7 +64,7 @@ export function homeScreen(go) {
         journeyButton(go),
         // Settings is designed but inert in slice 1.
         el('div', {
-          width: px(42), height: px(42), borderRadius: '50%',
+          width: px(TAP_MIN), height: px(TAP_MIN), borderRadius: '50%',
           background: 'rgba(255,251,240,.92)', boxShadow: '0 3px 0 rgba(75,53,36,.12)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: '0.55',
         }, icon('gear', 22, COLORS.ink)),
