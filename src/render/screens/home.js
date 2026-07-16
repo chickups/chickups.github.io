@@ -57,6 +57,7 @@ export function homeScreen(go) {
         position: 'absolute', top: px(178), left: '50%', transform: 'translateX(-50%)', zIndex: '6',
         background: COLORS.cream, padding: `${px(7)} ${px(16)}`, borderRadius: px(20),
         boxShadow: '0 3px 0 rgba(75,53,36,.1)', display: 'flex', alignItems: 'center', gap: px(7),
+        whiteSpace: 'nowrap',
       },
       icon('truck', 18, COLORS.orangeD),
       el('span', { font: `800 ${px(14)} 'Nunito'`, color: COLORS.orangeD }, 'Catch up with the truck!'),

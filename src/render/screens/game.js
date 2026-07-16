@@ -125,7 +125,7 @@ export function gameScreen(go) {
 
     let tip = '';
     if (!state.everHeld) tip = TIP_HOLD;
-    else if (!state.everGrabbed && state.everLaunched) tip = TIP_RELEASE;
+    else if (!state.everGrabbed) tip = TIP_RELEASE;
     hud.update(scoreOf(state), state.mult, tip);
   }
 
@@ -160,7 +160,12 @@ export function gameScreen(go) {
       addFeathers(state.feathers);
       const isBest = metres > best;
       if (isBest) setBest(metres);
-      go(isBest ? 'best' : 'oops', { score: metres, best: Math.max(best, metres), feathers: state.feathers });
+      go(isBest ? 'best' : 'oops', {
+        score: metres,
+        best: Math.max(best, metres),
+        previousBest: best,
+        feathers: state.feathers,
+      });
       return;
     }
     raf = requestAnimationFrame(frame);

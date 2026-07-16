@@ -8,7 +8,7 @@ import { success } from '../../haptics.js';
 
 /**
  * @param {(name: string) => void} go
- * @param {{score: number, best: number, feathers: number}} arg
+ * @param {{score: number, best: number, previousBest: number, feathers: number}} arg
  * @returns {HTMLElement}
  */
 export function bestScreen(go, arg) {
@@ -52,6 +52,13 @@ export function bestScreen(go, arg) {
         textShadow: '0 6px 0 #D9701E,0 12px 16px rgba(75,53,36,.3)',
       }, String(arg.score)),
     ),
+    arg.previousBest > 0
+      ? el('div', {
+          position: 'absolute', top: px(310), left: '0px', right: '0px',
+          textAlign: 'center', zIndex: '4', font: `800 ${px(13)} 'Nunito'`,
+          letterSpacing: '.06em', color: '#7A3E12', opacity: '.75',
+        }, `PREVIOUS ${arg.previousBest}`)
+      : null,
     el('div', {
       position: 'absolute', top: px(330), left: '0px', right: '0px',
       textAlign: 'center', zIndex: '4', font: `700 ${px(18)} 'Nunito'`, color: '#7A3E12',

@@ -17,23 +17,36 @@ export const TAP_MIN = 44;
  * pressed shadow ends up identical to the rest shadow, and the lip never
  * compresses at all — with no error anywhere.
  *
+ * A tap only counts if the press that triggered it started on this same
+ * node — otherwise a finger lifted over the button (e.g. still held from
+ * the death that just ended the run) would fire it via a bare `pointerup`,
+ * which needs no matching press at all.
+ *
  * @param {HTMLElement} node
  * @param {number} lip shadow depth in points
  * @param {string} restShadow
  * @param {string} pressShadow
+ * @param {() => void} [onTap]
  */
-function pressable(node, lip, restShadow, pressShadow) {
+function pressable(node, lip, restShadow, pressShadow, onTap) {
+  let armed = false;
   node.addEventListener('pointerdown', () => {
+    armed = true;
     node.style.transform = `translateY(${px(lip)})`;
     node.style.boxShadow = pressShadow;
   });
-  const release = () => {
+  const reset = () => {
     node.style.transform = 'translateY(0px)';
     node.style.boxShadow = restShadow;
   };
-  node.addEventListener('pointerup', release);
-  node.addEventListener('pointerleave', release);
-  node.addEventListener('pointercancel', release);
+  node.addEventListener('pointerup', () => {
+    const fire = armed; // only a press that started HERE counts
+    armed = false;
+    reset();
+    if (fire && onTap) onTap();
+  });
+  node.addEventListener('pointerleave', () => { armed = false; reset(); });
+  node.addEventListener('pointercancel', () => { armed = false; reset(); });
 }
 
 /**
@@ -68,8 +81,7 @@ export function primaryButton(label, glyph, onTap, opts = {}) {
     label,
   );
   if (!disabled) {
-    pressable(node, lip, restShadow, pressShadow);
-    node.addEventListener('pointerup', onTap);
+    pressable(node, lip, restShadow, pressShadow, onTap);
   }
   return node;
 }
@@ -100,8 +112,7 @@ export function secondaryButton(label, glyph, onTap) {
     glyph ? icon(glyph, 18, COLORS.ink) : null,
     label,
   );
-  pressable(node, 4, restShadow, pressShadow);
-  node.addEventListener('pointerup', onTap);
+  pressable(node, 4, restShadow, pressShadow, onTap);
   return node;
 }
 

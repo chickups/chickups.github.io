@@ -93,7 +93,8 @@ const CSS = `
   [style*="pConf"], [style*="pTwinkle"], [style*="gbCloud"],
   [style*="peekBob"], [style*="puff"], [style*="truckBob"],
   [style*="pFloat"], [style*="peepBob"], [style*="peepWingFlap"],
-  [style*="peepLegL"], [style*="peepLegR"], [style*="peepBlink"] {
+  [style*="peepLegL"], [style*="peepLegR"], [style*="peepBlink"],
+  [style*="tireSpin"] {
     animation: none !important;
   }
   [style*="pPop"] { animation: pFade .2s !important; }
