@@ -130,25 +130,48 @@ export function gameScreen(go) {
   }
 
   // --- loop ------------------------------------------------------------
+  // The simulation runs on a FIXED timestep, decoupled from the display's frame
+  // rate. rAF's dt varies with refresh rate (60Hz vs 120Hz) and with every hitch,
+  // and feeding that straight to `step` made the physics resolution-dependent:
+  // the same taps gave different arcs on different phones. A fixed step also makes
+  // a run reproducible from its seed plus its tap frames, which is what lets a
+  // ghost replay exist at all.
+  const FIXED_DT = 1 / 60;
+  /** Ticks per rAF frame. Beyond this we drop simulated time rather than spiral:
+   *  catching up costs more than it earns, and each extra tick makes the next
+   *  frame later still. */
+  const MAX_TICKS = 5;
+
   const input = makeInput(root);
   let raf = 0;
   let last = performance.now();
+  let acc = 0;
   let stopped = false;
   let prevPhase = state.phase;
 
   function frame(now) {
     if (stopped) return;
-    let dt = (now - last) / 1000;
+    let elapsed = (now - last) / 1000;
     last = now;
     // Clamp so a backgrounded tab cannot teleport Peep through the field.
-    if (dt > 0.05) dt = 0.05;
+    if (elapsed > 0.25) elapsed = 0.25;
+    acc += elapsed;
 
     const h = viewportPoints().h;
-    state = step(state, field, dt, input.isPressed(), h);
+    let ticks = 0;
+    while (acc >= FIXED_DT && ticks < MAX_TICKS && state.phase !== 'dead') {
+      acc -= FIXED_DT;
+      ticks++;
+      // Polled once per TICK, not once per frame: isPressed() consumes the press
+      // latch, so a tap that came and went between frames still lands on exactly
+      // one tick.
+      state = step(state, field, FIXED_DT, input.isPressed(), h);
 
-    if (state.phase === 'fly' && prevPhase === 'orbit') medium();
-    if (state.phase === 'orbit' && prevPhase === 'fly') tap();
-    prevPhase = state.phase;
+      if (state.phase === 'fly' && prevPhase === 'orbit') medium();
+      if (state.phase === 'orbit' && prevPhase === 'fly') tap();
+      prevPhase = state.phase;
+    }
+    if (ticks >= MAX_TICKS) acc = 0;
 
     const band = PHYSICS.orbitRadius + PHYSICS.grabTolerance;
     syncWheels(state.cameraY - band, state.cameraY + h + band);
