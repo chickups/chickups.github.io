@@ -7,15 +7,22 @@ import { COLORS } from '../core/tokens.js';
 export const TAP_MIN = 44;
 
 /**
- * The doc's signature button: a solid bottom "lip" that compresses on press.
+ * The doc's signature button (§11): a solid bottom "lip" that compresses on press.
+ *
+ * Both shadow strings are passed in explicitly rather than derived by rewriting
+ * `node.style.boxShadow`. Reading that property back does NOT return what you
+ * wrote — the browser normalises it, moving the colour first and expanding
+ * offsets, so `0 8px 0 #D19412` comes back as `rgb(209, 148, 18) 0px 8px 0px`.
+ * Any regex written against the authored form silently fails to match, the
+ * pressed shadow ends up identical to the rest shadow, and the lip never
+ * compresses at all — with no error anywhere.
+ *
  * @param {HTMLElement} node
  * @param {number} lip shadow depth in points
+ * @param {string} restShadow
+ * @param {string} pressShadow
  */
-function pressable(node, lip) {
-  // Capture both states once, at rest. Recomputing the pressed shadow from the
-  // live style would compound: press twice and the lip is gone for good.
-  const restShadow = node.style.boxShadow;
-  const pressShadow = restShadow.replace(/0 [\d.]+px 0/, '0 0px 0');
+function pressable(node, lip, restShadow, pressShadow) {
   node.addEventListener('pointerdown', () => {
     node.style.transform = `translateY(${px(lip)})`;
     node.style.boxShadow = pressShadow;
@@ -40,6 +47,8 @@ export function primaryButton(label, glyph, onTap, opts = {}) {
   const size = opts.size ?? 30;
   const lip = opts.lip ?? 8;
   const disabled = opts.disabled ?? false;
+  const restShadow = `0 ${px(lip)} 0 ${COLORS.goldD}, 0 ${px(lip * 2)} ${px(24)} rgba(75,53,36,.28)`;
+  const pressShadow = `0 0px 0 ${COLORS.goldD}, 0 ${px(lip)} ${px(12)} rgba(75,53,36,.28)`;
   const node = el(
     'div',
     {
@@ -52,16 +61,14 @@ export function primaryButton(label, glyph, onTap, opts = {}) {
       font: `800 ${px(size)} 'Baloo 2'`,
       padding: `${px(size * 0.73)} 0`,
       borderRadius: px(34),
-      boxShadow: disabled
-        ? 'none'
-        : `0 ${px(lip)} 0 ${COLORS.goldD}, 0 ${px(lip * 2)} ${px(24)} rgba(75,53,36,.28)`,
-      transition: 'transform .08s',
+      boxShadow: disabled ? 'none' : restShadow,
+      transition: 'transform .08s, box-shadow .08s',
     },
     glyph ? icon(glyph, size * 0.87, disabled ? '#9c8f7a' : COLORS.ink) : null,
     label,
   );
   if (!disabled) {
-    pressable(node, lip);
+    pressable(node, lip, restShadow, pressShadow);
     node.addEventListener('pointerup', onTap);
   }
   return node;
@@ -74,6 +81,8 @@ export function primaryButton(label, glyph, onTap, opts = {}) {
  * @returns {HTMLElement}
  */
 export function secondaryButton(label, glyph, onTap) {
+  const restShadow = '0 4px 0 rgba(75,53,36,.12)';
+  const pressShadow = '0 0px 0 rgba(75,53,36,.12)';
   const node = el(
     'div',
     {
@@ -85,13 +94,13 @@ export function secondaryButton(label, glyph, onTap) {
       font: `800 ${px(17)} 'Baloo 2'`,
       padding: `${px(13)} 0`,
       borderRadius: px(20),
-      boxShadow: '0 4px 0 rgba(75,53,36,.12)',
-      transition: 'transform .08s',
+      boxShadow: restShadow,
+      transition: 'transform .08s, box-shadow .08s',
     },
     glyph ? icon(glyph, 18, COLORS.ink) : null,
     label,
   );
-  pressable(node, 4);
+  pressable(node, 4, restShadow, pressShadow);
   node.addEventListener('pointerup', onTap);
   return node;
 }
