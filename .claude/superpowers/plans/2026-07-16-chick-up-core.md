@@ -20,7 +20,9 @@ Every task's requirements implicitly include this section.
 - **Every file in `src/core/` starts with `// @ts-check`** and annotates exported functions with JSDoc.
 - **Nothing in `src/core/` may import from `src/render/`, reference `document`, `window`, or call `Math.random()`.** This is the portability rule; violating it silently destroys the Swift port.
 - **Coordinates are iOS logical points.** World space is **y-up**, origin at the centre of wheel 0. The DOM is y-down; only `render/` performs the flip.
-- **All colors, physics constants and timings come from `src/core/tokens.js`.** No literal colors or magic numbers elsewhere.
+- **All physics constants, scoring rules and camera behaviour come from `src/core/tokens.js`.** No magic numbers elsewhere. `tokens.js` is the single tuning surface Task 11 depends on and the constants manifest the Swift port inherits.
+- **Colors come from `tokens.js` in `src/core/`, `src/render/ui.js`, `src/render/hud.js` and `src/render/screens/*`.**
+  **Exempt: `src/render/art/*`.** The art modules are verbatim ports of the design-system components and keep their source literals (e.g. Peep's local `const C = {...}`, Tire's tread greys, GameBg's gradient stops). This is deliberate and follows from Porting Rule 5 — art fidelity is the entire reason this project renders in DOM rather than canvas, and hand-transcribing ~105 hex values into tokens would risk silently altering the art for no gain. **Hardcoded colors inside `src/render/art/*` are not a defect.** Hardcoded colors anywhere else are.
 - **Copy is verbatim from the design doc.** The string "Game Over" must never appear. The fail screen says `Oops!` / `One more flap?`.
 - **Portrait only.**
 - Design space width is exactly **393**. Reference height **852**. Both from the doc's `393×852pt`.
