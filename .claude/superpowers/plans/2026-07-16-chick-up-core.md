@@ -99,12 +99,18 @@ The source components live in the Claude Design project and are reproduced verba
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test src/core/"
+    "test": "node --test"
   }
 }
 ```
 
 No `dependencies` key, no `devDependencies` key. This is deliberate and permanent.
+
+The test script is **bare `node --test`**, with no path argument. Node's default
+discovery finds `**/*.test.js` — which today means `src/core/` only, since that
+is the only place tests are allowed to exist. Do not "improve" this to
+`node --test src/core/`: passing a directory makes Node treat the directory
+itself as a test file and the run dies with `MODULE_NOT_FOUND`.
 
 - [ ] **Step 2: Extend `.gitignore`**
 
