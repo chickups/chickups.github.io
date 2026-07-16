@@ -2,7 +2,7 @@
 /* Service worker. Cache-first: the game is fully static, so once installed it
    works offline permanently. Bump CACHE on every deploy to invalidate. */
 
-const CACHE = 'chickup-v1';
+const CACHE = 'chickup-v2';
 
 /** Everything needed to run with no network at all. */
 const PRECACHE = [
@@ -13,6 +13,7 @@ const PRECACHE = [
   './src/viewport.js',
   './src/storage.js',
   './src/input.js',
+  './src/haptics.js',
   './src/core/tokens.js',
   './src/core/rng.js',
   './src/core/physics.js',

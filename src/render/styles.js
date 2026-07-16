@@ -85,6 +85,20 @@ const CSS = `
 @keyframes pConf{0%{transform:translateY(-20px) rotate(0);opacity:0}12%{opacity:1}100%{transform:translateY(320px) rotate(300deg);opacity:0}}
 @keyframes pTwinkle{0%,100%{transform:scale(.7) rotate(0);opacity:.6}50%{transform:scale(1.1) rotate(20deg);opacity:1}}
 @keyframes pFade{from{opacity:0}to{opacity:1}}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Doc §12: parallax, confetti and idle bounces fall back to fades.
+     Gameplay motion is NOT animation-driven — Peep and the field are moved by
+     transform in the rAF loop — so the game stays fully playable here. */
+  [style*="pConf"], [style*="pTwinkle"], [style*="gbCloud"],
+  [style*="peekBob"], [style*="puff"], [style*="truckBob"],
+  [style*="pFloat"], [style*="peepBob"], [style*="peepWingFlap"],
+  [style*="peepLegL"], [style*="peepLegR"], [style*="peepBlink"] {
+    animation: none !important;
+  }
+  [style*="pPop"] { animation: pFade .2s !important; }
+  * { transition-duration: .01ms !important; }
+}
 `;
 
 let installed = false;

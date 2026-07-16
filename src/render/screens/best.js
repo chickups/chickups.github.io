@@ -4,6 +4,7 @@ import { peep } from '../art/peep.js';
 import { icon } from '../art/icon.js';
 import { primaryButton, secondaryButton } from '../ui.js';
 import { COLORS } from '../../core/tokens.js';
+import { success } from '../../haptics.js';
 
 /**
  * @param {(name: string) => void} go
@@ -11,6 +12,8 @@ import { COLORS } from '../../core/tokens.js';
  * @returns {HTMLElement}
  */
 export function bestScreen(go, arg) {
+  success();
+
   const confetti = [
     { top: 120, left: 30, size: 20, dur: 2.4, delay: 0, color: COLORS.cream },
     { top: 90, left: 160, size: 16, dur: 2.9, delay: 0.3, color: COLORS.creamDeep },

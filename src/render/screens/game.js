@@ -10,6 +10,7 @@ import { PHYSICS, SCORING, COLORS } from '../../core/tokens.js';
 import { makeInput } from '../../input.js';
 import { getBest, setBest, addFeathers } from '../../storage.js';
 import { viewportPoints } from '../../viewport.js';
+import { tap, medium } from '../../haptics.js';
 
 const WHEEL_SIZE = PHYSICS.orbitRadius * 2;
 const DEG = 180 / Math.PI;
@@ -133,6 +134,7 @@ export function gameScreen(go) {
   let raf = 0;
   let last = performance.now();
   let stopped = false;
+  let prevPhase = state.phase;
 
   function frame(now) {
     if (stopped) return;
@@ -143,6 +145,10 @@ export function gameScreen(go) {
 
     const h = viewportPoints().h;
     state = step(state, field, dt, input.isHolding(), h);
+
+    if (state.phase === 'fly' && prevPhase === 'orbit') medium();
+    if (state.phase === 'orbit' && prevPhase === 'fly') tap();
+    prevPhase = state.phase;
 
     const band = PHYSICS.orbitRadius + PHYSICS.grabTolerance;
     syncWheels(state.cameraY - band, state.cameraY + h + band);
