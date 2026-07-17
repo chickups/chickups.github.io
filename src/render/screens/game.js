@@ -17,11 +17,13 @@ import { makeInput } from '../../input.js';
 import {
   getBest, recordRun, getEquippedOutfit, setDailyBest,
   getStats, getSeenAchievements, markAchievementsSeen, checkMilestones,
+  getStreak, setStreak,
 } from '../../storage.js';
 import { pendingUnlocks } from '../../core/achievements.js';
 import { toastAchievement } from '../toast.js';
 import { queueReward } from './reward.js';
 import { dayNumber, dailySeed } from '../../core/daily.js';
+import { advanceStreak } from '../../core/streak.js';
 import { viewportPoints } from '../../viewport.js';
 import { tap, medium, rigid } from '../../haptics.js';
 
@@ -304,7 +306,14 @@ export function gameScreen(go, arg) {
         // live HUD actually showed, not a start-relative reading of it.
         biomeIndex: biomeIndexAtY(state.maxY),
       });
-      if (daily) setDailyBest(day, metres);
+      if (daily) {
+        setDailyBest(day, metres);
+        // The streak advances on a FINISHED daily run, not on opening the Daily
+        // screen — the ladder pays for playing, not for looking. `advanceStreak`
+        // is idempotent for the same day, so a second run today is free of charge
+        // and costs nothing to call unconditionally here.
+        setStreak(advanceStreak(getStreak(), day));
+      }
 
       // Read stats back only AFTER recordRun has written them — an achievement is a
       // fact about the new totals, so asking any earlier tests the previous run.
