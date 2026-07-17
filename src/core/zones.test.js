@@ -183,3 +183,55 @@ test('truckX direction: dir=1 moves +x before any wrap, dir=-1 moves -x', () => 
   assert.ok(truckX(t1, 0.1) > truckX(t1, 0), 'dir 1 should move rightward');
   assert.ok(truckX(tm1, 0.1) < truckX(tm1, 0), 'dir -1 should move leftward');
 });
+
+// --- truckX: checked against an INDEPENDENT oracle, not against itself -----
+//
+// The tests above compare truckX(...) to other calls of truckX(...) — direct vs.
+// stepped, repeated calls at the same t, before/after a small dt. None of them
+// ever compute an expected x by any means OTHER than calling truckX, so a pure
+// but WRONG implementation (e.g. scaling t by a tiny, wrong factor) passes all
+// of them: the self-comparisons stay internally consistent even while every
+// value is off. That is enough to silently desync a ghost replay against the
+// live truck it's supposed to reproduce. This test computes the expected x by
+// hand from truck.phase/dir/speed and the wrap span (DESIGN.width + HAZARD.truckW),
+// without ever calling truckX for the expected value.
+test('truckX matches an independently computed expectation (oracle), including the wrap', () => {
+  const span = DESIGN.width + HAZARD.truckW;
+  const half = HAZARD.truckW / 2;
+
+  /**
+   * Hand-written closed form, deliberately re-derived rather than delegated to
+   * truckX: centre = phase + dir*speed*t, wrapped into [-half, span - half).
+   * @param {{dir:1|-1, speed:number, phase:number}} truck
+   * @param {number} t
+   */
+  function oracleX(truck, t) {
+    const raw = truck.phase + truck.dir * truck.speed * t + half;
+    const wrapped = ((raw % span) + span) % span;
+    return wrapped - half;
+  }
+
+  const trucks = [
+    { y: 0, dir: /** @type {1} */ (1), speed: HAZARD.truckSpeed, phase: 0 },
+    { y: 0, dir: /** @type {-1} */ (-1), speed: HAZARD.truckSpeed, phase: 200 },
+    { y: 500, dir: /** @type {1} */ (1), speed: 37, phase: 411.7 },
+    { y: 500, dir: /** @type {-1} */ (-1), speed: 123.4, phase: 88.8 },
+  ];
+  for (const truck of trucks) {
+    for (let t = 0; t < 40; t += 0.37) {
+      const expected = oracleX(truck, t);
+      const actual = truckX(truck, t);
+      assert.ok(
+        Math.abs(actual - expected) < 1e-6,
+        `truck=${JSON.stringify(truck)} t=${t}: expected ${expected}, got ${actual}`,
+      );
+    }
+  }
+
+  // Explicitly cover the wrap: pick a t guaranteed to wrap the span several
+  // times over, so a broken modulo (or a broken accumulation feeding it)
+  // can't hide by staying inside one lap.
+  const wrapTruck = { y: 0, dir: /** @type {1} */ (1), speed: 100, phase: 0 };
+  const bigT = (span * 3.5) / wrapTruck.speed;
+  assert.ok(Math.abs(truckX(wrapTruck, bigT) - oracleX(wrapTruck, bigT)) < 1e-6, 'wrap case diverged from the oracle');
+});
