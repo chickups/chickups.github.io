@@ -5,12 +5,42 @@ import { tire } from '../art/tire.js';
 import { truck } from '../art/truck.js';
 import { logo } from '../art/logo.js';
 import { icon } from '../art/icon.js';
-import { primaryButton, pill, card } from '../ui.js';
+import { primaryButton, pill, card, TAP_MIN } from '../ui.js';
 import { COLORS } from '../../core/tokens.js';
-import { getFeathers, markIntroSeen } from '../../storage.js';
+import { getFeathers, markIntroSeen, getEquippedOutfit, getDailyBest } from '../../storage.js';
+import { dayNumber } from '../../core/daily.js';
 
 /**
- * @param {(name: string) => void} go
+ * A round top-bar entry point, matching the Journey button's style. Used for
+ * Journey, Shop and Achievements so all three read as one family of buttons.
+ * @param {string} glyph
+ * @param {(name: string, arg?: any) => void} go
+ * @param {string} screen
+ * @returns {HTMLElement}
+ */
+function navButton(glyph, go, screen) {
+  const node = el('div', {
+    width: px(TAP_MIN), height: px(TAP_MIN), borderRadius: '50%',
+    background: 'rgba(255,251,240,.92)', boxShadow: '0 3px 0 rgba(75,53,36,.12)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+  }, icon(glyph, 20, COLORS.orangeD));
+  node.addEventListener('click', () => go(screen));
+  return node;
+}
+
+/**
+ * The daily route's subtitle. Reads the clock here in render/, never in core/:
+ * `dayNumber` takes the time as an argument precisely so core stays pure.
+ * @returns {string}
+ */
+function todaysRouteLabel() {
+  const day = dayNumber(Date.now(), new Date().getTimezoneOffset());
+  const best = getDailyBest(day);
+  return best > 0 ? `Today's best ${best} m` : "Today's route";
+}
+
+/**
+ * @param {(name: string, arg?: any) => void} go
  * @returns {HTMLElement}
  */
 export function homeScreen(go) {
@@ -42,12 +72,19 @@ export function homeScreen(go) {
         pill('feather', String(getFeathers()), COLORS.yellowD),
         pill('flame', '0', COLORS.orangeD),
       ),
-      // Settings is designed but inert in slice 1.
-      el('div', {
-        width: px(42), height: px(42), borderRadius: '50%',
-        background: 'rgba(255,251,240,.92)', boxShadow: '0 3px 0 rgba(75,53,36,.12)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: '0.55',
-      }, icon('gear', 22, COLORS.ink)),
+      el(
+        'div',
+        { display: 'flex', gap: px(8) },
+        navButton('map', go, 'journey'),
+        navButton('shirt', go, 'shop'),
+        navButton('trophy', go, 'achievements'),
+        // Settings is designed but inert in slice 1.
+        el('div', {
+          width: px(TAP_MIN), height: px(TAP_MIN), borderRadius: '50%',
+          background: 'rgba(255,251,240,.92)', boxShadow: '0 3px 0 rgba(75,53,36,.12)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: '0.55',
+        }, icon('gear', 22, COLORS.ink)),
+      ),
     ),
     el('div', { position: 'absolute', top: px(200), left: '50%', transform: 'translateX(-46%) scale(.62)' }, truck(120)),
     el('div', { position: 'absolute', top: px(132), left: '50%', transform: 'translateX(-50%)', zIndex: '6' }, logo(46)),
@@ -63,7 +100,11 @@ export function homeScreen(go) {
       el('span', { font: `800 ${px(14)} 'Nunito'`, color: COLORS.orangeD }, 'Catch up with the truck!'),
     ),
     el('div', { position: 'absolute', bottom: px(392), right: px(34) }, tire(72, 9)),
-    el('div', { position: 'absolute', bottom: px(398), left: px(48), zIndex: '4' }, peep(128, 'idle')),
+    el(
+      'div',
+      { position: 'absolute', bottom: px(398), left: px(48), zIndex: '4' },
+      peep(128, 'idle', /** @type {import('../art/peep.js').PeepOutfit} */ (getEquippedOutfit())),
+    ),
     el(
       'div',
       {
@@ -74,7 +115,10 @@ export function homeScreen(go) {
       el(
         'div',
         { width: '100%', display: 'flex', gap: px(12) },
-        card('Daily Run', "Today's route", { disabled: true, badge: 'SOON' }),
+        // The daily route needs no server: the field is a pure function of its
+        // seed, so seeding from the date gives everyone the same route without
+        // anyone distributing it. Only a leaderboard would need a backend.
+        card('Daily Run', todaysRouteLabel(), { onTap: () => go('game', { daily: true }) }),
         card('Race a Ghost', 'Beat your best', { disabled: true, badge: 'SOON' }),
       ),
     ),

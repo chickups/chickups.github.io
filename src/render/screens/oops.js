@@ -6,9 +6,19 @@ import { primaryButton, secondaryButton, statTile } from '../ui.js';
 import { COLORS } from '../../core/tokens.js';
 
 /**
+ * Subtitle per cause of death. Both stay on the right side of doc §05: warm,
+ * no death wording, and pointed back at the next run rather than at the loss.
+ * @type {Record<string, string>}
+ */
+const FLAVOUR = {
+  fall: 'One more flap?',
+  truck: 'Mind the traffic!',
+};
+
+/**
  * Doc §05: no death-screen wording — a friendly Oops!, and one tap back into a run.
  * @param {(name: string) => void} go
- * @param {{score: number, best: number, feathers: number}} arg
+ * @param {{score: number, best: number, feathers: number, deathBy?: 'fall'|'truck'}} arg
  * @returns {HTMLElement}
  */
 export function oopsScreen(go, arg) {
@@ -38,7 +48,7 @@ export function oopsScreen(go, arg) {
         padding: `${px(26)} ${px(24)} ${px(22)}`, boxShadow: '0 12px 0 rgba(75,53,36,.16)',
       },
       el('div', { textAlign: 'center', font: `800 ${px(40)} 'Baloo 2'`, color: COLORS.ink, lineHeight: '1' }, 'Oops!'),
-      el('div', { textAlign: 'center', font: `700 ${px(15)} 'Nunito'`, color: COLORS.orangeD, margin: `${px(4)} 0 ${px(18)}` }, 'One more flap?'),
+      el('div', { textAlign: 'center', font: `700 ${px(15)} 'Nunito'`, color: COLORS.orangeD, margin: `${px(4)} 0 ${px(18)}` }, FLAVOUR[arg.deathBy || 'fall'] || FLAVOUR.fall),
       el('div', { display: 'flex', gap: px(14), marginBottom: px(14) }, statTile('SCORE', String(arg.score)), statTile('BEST', String(arg.best))),
       el(
         'div',

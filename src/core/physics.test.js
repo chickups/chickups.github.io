@@ -62,39 +62,46 @@ test('stepFly is symmetric — up and back down returns near the start', () => {
 });
 
 test('findGrab returns null when no wheel is in the band', () => {
-  const entries = [{ index: 0, wheel: { x: 0, y: 0 } }];
-  assert.equal(findGrab({ x: 500, y: 500 }, entries, 62, 22), null);
+  const entries = [{ index: 0, wheel: { x: 0, y: 0 }, radius: 62 }];
+  assert.equal(findGrab({ x: 500, y: 500 }, entries, 22), null);
 });
 
 test('findGrab hits inside the annulus and misses outside it', () => {
-  const entries = [{ index: 3, wheel: { x: 0, y: 0 } }];
+  const entries = [{ index: 3, wheel: { x: 0, y: 0 }, radius: 62 }];
   // Distance 62 — dead on the orbit circle.
-  assert.equal(findGrab({ x: 62, y: 0 }, entries, 62, 22)?.index, 3);
+  assert.equal(findGrab({ x: 62, y: 0 }, entries, 22)?.index, 3);
   // Distance 80 — inside tolerance (|80-62| = 18 <= 22).
-  assert.equal(findGrab({ x: 80, y: 0 }, entries, 62, 22)?.index, 3);
+  assert.equal(findGrab({ x: 80, y: 0 }, entries, 22)?.index, 3);
   // Distance 85 — outside tolerance (|85-62| = 23 > 22).
-  assert.equal(findGrab({ x: 85, y: 0 }, entries, 62, 22), null);
+  assert.equal(findGrab({ x: 85, y: 0 }, entries, 22), null);
   // Distance 40 — inside the circle but within tolerance (|40-62| = 22 <= 22).
-  assert.equal(findGrab({ x: 40, y: 0 }, entries, 62, 22)?.index, 3);
+  assert.equal(findGrab({ x: 40, y: 0 }, entries, 22)?.index, 3);
   // Distance 30 — too far inside (|30-62| = 32 > 22).
-  assert.equal(findGrab({ x: 30, y: 0 }, entries, 62, 22), null);
+  assert.equal(findGrab({ x: 30, y: 0 }, entries, 22), null);
 });
 
 test('findGrab reports the contact angle so entry direction is preserved', () => {
-  const entries = [{ index: 0, wheel: { x: 0, y: 0 } }];
-  const hit = findGrab({ x: 0, y: 62 }, entries, 62, 22);
+  const entries = [{ index: 0, wheel: { x: 0, y: 0 }, radius: 62 }];
+  const hit = findGrab({ x: 0, y: 62 }, entries, 22);
   near(hit.angle, Math.PI / 2, 1e-9);
 });
 
 test('findGrab returns the closest-fitting wheel when several are in band', () => {
   const entries = [
-    { index: 0, wheel: { x: 0, y: 0 } },   // distance from (62,0) is 62 -> err 0
-    { index: 1, wheel: { x: 140, y: 0 } }, // distance from (62,0) is 78 -> err 16
+    { index: 0, wheel: { x: 0, y: 0 }, radius: 62 },   // distance from (62,0) is 62 -> err 0
+    { index: 1, wheel: { x: 140, y: 0 }, radius: 62 }, // distance from (62,0) is 78 -> err 16
   ];
-  assert.equal(findGrab({ x: 62, y: 0 }, entries, 62, 22)?.index, 0);
+  assert.equal(findGrab({ x: 62, y: 0 }, entries, 22)?.index, 0);
 });
 
 test('findGrab returns field indices, not array positions', () => {
-  const entries = [{ index: 42, wheel: { x: 0, y: 0 } }];
-  assert.equal(findGrab({ x: 62, y: 0 }, entries, 62, 22)?.index, 42);
+  const entries = [{ index: 42, wheel: { x: 0, y: 0 }, radius: 62 }];
+  assert.equal(findGrab({ x: 62, y: 0 }, entries, 22)?.index, 42);
+});
+
+test('findGrab reads each candidate\'s own radius, so a bigger prop grabs from farther out', () => {
+  const entries = [{ index: 5, wheel: { x: 0, y: 0 }, radius: 62 * 1.25 }];
+  // Distance 77.5 is dead on the gear's scaled radius, well outside a tire's.
+  assert.equal(findGrab({ x: 77.5, y: 0 }, entries, 22)?.index, 5);
+  assert.equal(findGrab({ x: 77.5, y: 0 }, [{ index: 5, wheel: { x: 0, y: 0 }, radius: 62 }], 5), null);
 });

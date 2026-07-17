@@ -3,6 +3,7 @@ import { el, px } from '../el.js';
 import { peep } from '../art/peep.js';
 import { truck } from '../art/truck.js';
 import { markIntroSeen } from '../../storage.js';
+import { TAP_MIN } from '../ui.js';
 
 const CAPTIONS = ['Peep was a little late.', 'Everyone had already left.', 'Time to catch up.'];
 const POSES = ['idle', 'frightened', 'run'];
@@ -56,7 +57,14 @@ export function introScreen(go) {
   const skip = el('div', {
     position: 'absolute', top: px(66), right: px(20), zIndex: '30', cursor: 'pointer',
     background: 'rgba(255,251,240,.16)', color: '#FFFBF0',
-    font: `800 ${px(15)} 'Nunito'`, padding: `${px(8)} ${px(18)}`, borderRadius: px(20),
+    font: `800 ${px(15)} 'Nunito'`, padding: `0 ${px(18)}`,
+    // Doc §11: every tappable target is >= TAP_MIN tall. The `font` shorthand
+    // above resets line-height to normal (~1.2), which alone only gets this to
+    // ~36.5pt (padding + line box) — short of the minimum, and this is the
+    // ONLY escape from the intro. minHeight + flex centering guarantees the
+    // real rendered box, not just the text line, meets it.
+    minHeight: px(TAP_MIN), display: 'flex', alignItems: 'center', justifyContent: 'center',
+    borderRadius: px(20),
   }, 'Skip');
   skip.addEventListener('pointerdown', done);
 

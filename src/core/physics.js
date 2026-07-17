@@ -58,18 +58,20 @@ export function stepFly(f, dt, gravity) {
 /**
  * Find a wheel whose grab annulus contains p. The band is an annulus around the
  * wheel centre, not the orbit circle itself, so Peep may grab from slightly
- * inside or outside the orbit radius.
+ * inside or outside the orbit radius. Each candidate carries its own radius —
+ * props differ in size (a gear's orbit radius is scaled from a tire's), so the
+ * annulus is computed per-entry rather than from one global radius.
  * @param {Vec} p
- * @param {{index:number, wheel:Vec}[]} entries candidate wheels with field indices
- * @param {number} radius orbit radius
+ * @param {{index:number, wheel:Vec, radius:number}[]} entries candidate wheels
+ *   with field indices and each one's own orbit radius
  * @param {number} tolerance half-width of the annulus
  * @returns {{index:number, angle:number}|null}
  */
-export function findGrab(p, entries, radius, tolerance) {
+export function findGrab(p, entries, tolerance) {
   /** @type {{index:number, angle:number}|null} */
   let best = null;
   let bestErr = Infinity;
-  for (const { index, wheel } of entries) {
+  for (const { index, wheel, radius } of entries) {
     const dx = p.x - wheel.x;
     const dy = p.y - wheel.y;
     const err = Math.abs(Math.hypot(dx, dy) - radius);

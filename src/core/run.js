@@ -1,8 +1,45 @@
 // @ts-check
-import { PHYSICS, SCORING, CAMERA } from './tokens.js';
+import { PHYSICS, SCORING, CAMERA, PROPS, ZONES, HAZARD } from './tokens.js';
 import { orbitPosition, stepOrbit, launchVelocity, stepFly, findGrab } from './physics.js';
+import { truckX } from './zones.js';
 
 /** @typedef {import('./field.js').Field} Field */
+/** @typedef {import('./field.js').Prop} Prop */
+/** @typedef {import('./field.js').Pad} Pad */
+/** @typedef {import('./zones.js').Zones} Zones */
+/** @typedef {import('./zones.js').Updraft} Updraft */
+/** @typedef {import('./zones.js').Truck} Truck */
+
+/**
+ * A no-op zones stream, used when `step` is called without one (call sites
+ * that haven't been wired up to `makeZones` yet keep working, just without
+ * updrafts or trucks).
+ * @type {Zones}
+ */
+const EMPTY_ZONES = { updraftsInRange: () => [], trucksInRange: () => [] };
+
+/**
+ * Orbit radius for a prop kind. Gears are bigger than tires; pads have no
+ * orbit at all (a pad's contact test is a plain disc, not this annulus), so
+ * this is only meaningful for the two attachable kinds.
+ * @param {Prop['kind']} kind
+ * @returns {number}
+ */
+export function radiusOf(kind) {
+  return kind === 'gear' ? PHYSICS.orbitRadius * PROPS.gearRadiusScale : PHYSICS.orbitRadius;
+}
+
+/**
+ * Orbit/launch rate for a prop kind. Gears spin the opposite way to tires
+ * (`gearRateScale` is negative), which reverses their launch arc too — the
+ * same signed rate feeds both `stepOrbit` and `launchVelocity` so the two
+ * stay consistent.
+ * @param {Prop['kind']} kind
+ * @returns {number}
+ */
+export function rateOf(kind) {
+  return kind === 'gear' ? PHYSICS.orbitRate * PROPS.gearRateScale : PHYSICS.orbitRate;
+}
 
 /**
  * @typedef {Object} RunState
@@ -20,11 +57,18 @@ import { orbitPosition, stepOrbit, launchVelocity, stepFly, findGrab } from './p
  * @property {number} mult         current multiplier, 1..SCORING.multMax
  * @property {number} feathers     banked this run
  * @property {number} lastWheelY   y of the wheel last launched from; chain-break threshold
- * @property {number} lockWheel    wheel index that cannot be re-grabbed yet, or -1
- * @property {boolean} wasHolding  previous frame's input, for edge detection
- * @property {boolean} everHeld
+ * @property {number} lockWheel    spine prop index that cannot be re-grabbed yet, or -1
+ * @property {number} lockPad      pad-stream index that cannot re-fire yet, or -1. Pads have
+ *                                 their own index space (gap index, not spine index), so this
+ *                                 must NOT share a field with `lockWheel` — a pad index and a
+ *                                 spine index can collide numerically and lock the wrong prop.
+ * @property {boolean} wasPressed  previous frame's input, for tap edge detection
  * @property {boolean} everLaunched
  * @property {boolean} everGrabbed
+ * @property {number} t            seconds since the run began; accumulated from `dt`,
+ *                                 never read from a clock. Feeds `truckX`.
+ * @property {'fall'|'truck'} deathBy  cause of death; meaningless (but always a real
+ *                                 value) before `phase` is `'dead'`.
  */
 
 /**
@@ -33,9 +77,9 @@ import { orbitPosition, stepOrbit, launchVelocity, stepFly, findGrab } from './p
  * @returns {RunState}
  */
 export function createRun(field, viewportH) {
-  const wheel = field.wheelAt(0);
+  const wheel = field.propAt(0);
   const angle = Math.PI / 2; // top of the wheel
-  const p = orbitPosition(wheel, angle, PHYSICS.orbitRadius);
+  const p = orbitPosition(wheel, angle, radiusOf(wheel.kind));
   return {
     phase: 'orbit',
     wheelIndex: 0,
@@ -52,43 +96,64 @@ export function createRun(field, viewportH) {
     feathers: 0,
     lastWheelY: wheel.y,
     lockWheel: -1,
-    wasHolding: false,
-    everHeld: false,
+    lockPad: -1,
+    wasPressed: false,
     everLaunched: false,
     everGrabbed: false,
+    t: 0,
+    // 'fall' is the sensible default: it is slice-1's sole failure mode, and
+    // this field is meaningless anyway until phase is 'dead'.
+    deathBy: 'fall',
   };
 }
 
 /**
  * Advance the run by one frame. Pure: returns a new state.
+ *
+ * One verb: TAP. Peep orbits on his own, a tap launches him, and landing on a
+ * wheel re-attaches automatically. `pressed` is the raw button state; the tap
+ * edge is derived here rather than in the input layer so that the whole verb
+ * lives in core/ and ports with it.
+ *
  * @param {RunState} state
  * @param {Field} field
  * @param {number} dt seconds
- * @param {boolean} holding
+ * @param {boolean} pressed raw input: is the button down this frame?
  * @param {number} viewportH points
+ * @param {Zones} [zones] updraft/truck streams; omit for a plain run with neither
  * @returns {RunState}
  */
-export function step(state, field, dt, holding, viewportH) {
+export function step(state, field, dt, pressed, viewportH, zones = EMPTY_ZONES) {
   if (state.phase === 'dead') return state;
 
   const s = { ...state };
-  if (holding) s.everHeld = true;
+  s.t = state.t + dt;
+  const tapped = pressed && !s.wasPressed;
 
   if (s.phase === 'orbit') {
-    const wheel = field.wheelAt(s.wheelIndex);
-    if (holding) {
-      s.angle = stepOrbit(s.angle, dt, PHYSICS.orbitRate);
-      const p = orbitPosition(wheel, s.angle, PHYSICS.orbitRadius);
-      s.x = p.x;
-      s.y = p.y;
-    } else if (s.wasHolding) {
-      const v = launchVelocity(s.angle, PHYSICS.orbitRate, PHYSICS.orbitRadius, PHYSICS.launchBoost);
+    const wheel = field.propAt(s.wheelIndex);
+    // A gear's rate is negative (gearRateScale), which both spins it the
+    // opposite way and reverses the tangential launch — the same signed rate
+    // must feed both, or a gear would spin one way and launch as if it spun
+    // the other.
+    const rate = rateOf(wheel.kind);
+    const radius = radiusOf(wheel.kind);
+    if (tapped) {
+      // Launch from the angle the player actually saw when they tapped, rather
+      // than one frame further along.
+      const v = launchVelocity(s.angle, rate, radius, PHYSICS.launchBoost);
       s.vx = v.x;
       s.vy = v.y;
       s.phase = 'fly';
       s.lastWheelY = wheel.y;
       s.lockWheel = s.wheelIndex;
       s.everLaunched = true;
+    } else {
+      // The tire spins by itself; staying on is not something the player sustains.
+      s.angle = stepOrbit(s.angle, dt, rate);
+      const p = orbitPosition(wheel, s.angle, radius);
+      s.x = p.x;
+      s.y = p.y;
     }
   } else if (s.phase === 'fly') {
     const f = stepFly({ x: s.x, y: s.y, vx: s.vx, vy: s.vy }, dt, PHYSICS.gravity);
@@ -97,6 +162,21 @@ export function step(state, field, dt, holding, viewportH) {
     s.vx = f.vx;
     s.vy = f.vy;
 
+    // Updraft zones: a column of rising air, not a spine prop — no attach,
+    // no chain/mult/feathers. While Peep's centre sits inside the rect, add
+    // lift on top of the gravity `stepFly` already applied, clamped to
+    // updraftMaxV. Leaving the rect (checked fresh every frame, nothing
+    // latched) returns him to plain freefall immediately, per doc §13.
+    const zoneBand = ZONES.updraftH / 2 + ZONES.updraftW / 2;
+    const inUpdraft = zones
+      .updraftsInRange(s.y - zoneBand, s.y + zoneBand)
+      .some(
+        (u) => Math.abs(s.x - u.x) <= u.w / 2 && Math.abs(s.y - u.y) <= u.h / 2,
+      );
+    if (inUpdraft) {
+      s.vy = Math.min(ZONES.updraftMaxV, s.vy + ZONES.updraftLift * dt);
+    }
+
     // Falling below the wheel you last left breaks the chain: the multiplier
     // measures sustained upward progress, not grabs in total.
     if (s.chain > 0 && s.y < s.lastWheelY) {
@@ -104,22 +184,53 @@ export function step(state, field, dt, holding, viewportH) {
       s.mult = 1;
     }
 
-    const band = PHYSICS.orbitRadius + PHYSICS.grabTolerance;
-
-    // Release the re-grab lock once Peep is clear of that wheel's band.
+    // Release the re-grab lock once Peep is clear of the locked prop's own
+    // contact band. Wheel and pad locks live in separate index spaces (a pad
+    // index and a spine index can collide numerically) and so are tracked and
+    // released independently.
     if (s.lockWheel >= 0) {
-      const lw = field.wheelAt(s.lockWheel);
-      if (Math.hypot(s.x - lw.x, s.y - lw.y) > band) s.lockWheel = -1;
+      const lw = field.propAt(s.lockWheel);
+      const lockBand = radiusOf(lw.kind) + PHYSICS.grabTolerance;
+      if (Math.hypot(s.x - lw.x, s.y - lw.y) > lockBand) s.lockWheel = -1;
+    }
+    if (s.lockPad >= 0) {
+      const lp = field.padAt(s.lockPad);
+      if (!lp || Math.hypot(s.x - lp.x, s.y - lp.y) > PROPS.padRadius) s.lockPad = -1;
     }
 
-    if (holding) {
+    // Pads are touched, not grabbed: a simple distance check against a disc,
+    // scanned separately from findGrab because their contact test differs
+    // entirely from the orbitable annulus test below. Pads are their own
+    // deterministic stream (field.padsInRange), never a spine prop.
+    const padHit = field
+      .padsInRange(s.y - PROPS.padRadius, s.y + PROPS.padRadius)
+      .find(
+        (e) =>
+          e.index !== s.lockPad &&
+          Math.hypot(s.x - e.pad.x, s.y - e.pad.y) <= PROPS.padRadius,
+      );
+
+    if (padHit) {
+      // No tap, no attach: a pad bypasses the hold-release verb entirely.
+      // vx is untouched, so it grants no steering.
+      s.vy = PROPS.padBounce;
+      s.lastWheelY = padHit.pad.y;
+      s.lockPad = padHit.index;
+    } else {
+      // Touching an orbitable prop's band attaches automatically — the player
+      // times the launch, never the catch. Each candidate carries its own
+      // radius (a gear's differs from a tire's). The spine only ever contains
+      // tire/gear now, so no kind filter is needed here.
+      const maxRadius = Math.max(radiusOf('tire'), radiusOf('gear'));
+      const band = maxRadius + PHYSICS.grabTolerance;
       const entries = field
-        .wheelsInRange(s.y - band, s.y + band)
-        .filter((e) => e.index !== s.lockWheel);
-      const hit = findGrab({ x: s.x, y: s.y }, entries, PHYSICS.orbitRadius, PHYSICS.grabTolerance);
+        .propsInRange(s.y - band, s.y + band)
+        .filter((e) => e.index !== s.lockWheel)
+        .map((e) => ({ index: e.index, wheel: e.prop, radius: radiusOf(e.prop.kind) }));
+      const hit = findGrab({ x: s.x, y: s.y }, entries, PHYSICS.grabTolerance);
       if (hit) {
-        const wheel = field.wheelAt(hit.index);
-        const p = orbitPosition(wheel, hit.angle, PHYSICS.orbitRadius);
+        const wheel = field.propAt(hit.index);
+        const p = orbitPosition(wheel, hit.angle, radiusOf(wheel.kind));
         s.phase = 'orbit';
         s.wheelIndex = hit.index;
         s.angle = hit.angle;
@@ -141,9 +252,37 @@ export function step(state, field, dt, holding, viewportH) {
   if (s.y > s.maxY) s.maxY = s.y;
   const desiredCamera = s.maxY - viewportH * CAMERA.peepAnchor;
   if (desiredCamera > s.cameraY) s.cameraY = desiredCamera;
-  if (s.y < s.cameraY) s.phase = 'dead';
+  if (s.phase !== 'dead' && s.y < s.cameraY) {
+    s.phase = 'dead';
+    s.deathBy = 'fall';
+  }
 
-  s.wasHolding = holding;
+  // Truck contact: the second failure condition. A rect-vs-circle test —
+  // Peep's hitbox (`peepHitR`) is deliberately smaller than his art, so
+  // near-misses read as near. Checked in every phase (orbit or fly): a truck
+  // can clip Peep off a wheel just as easily as out of the air. `truckX` is
+  // the pure function of `(truck, s.t)`, never integrated, so this is exactly
+  // reproducible from the run clock alone (the point of the whole exercise —
+  // a future ghost replay).
+  if (s.phase !== 'dead') {
+    const trucks = zones.trucksInRange(s.y - HAZARD.truckH, s.y + HAZARD.truckH);
+    for (const truck of trucks) {
+      const tx = truckX(truck, s.t);
+      const halfW = HAZARD.truckW / 2;
+      const halfH = HAZARD.truckH / 2;
+      const cx = Math.max(tx - halfW, Math.min(s.x, tx + halfW));
+      const cy = Math.max(truck.y - halfH, Math.min(s.y, truck.y + halfH));
+      const dx = s.x - cx;
+      const dy = s.y - cy;
+      if (dx * dx + dy * dy <= HAZARD.peepHitR * HAZARD.peepHitR) {
+        s.phase = 'dead';
+        s.deathBy = 'truck';
+        break;
+      }
+    }
+  }
+
+  s.wasPressed = pressed;
   return s;
 }
 

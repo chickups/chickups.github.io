@@ -5,10 +5,13 @@ import { registerScreens, go } from './render/screens/router.js';
 import { splashScreen } from './render/screens/splash.js';
 import { introScreen } from './render/screens/intro.js';
 import { homeScreen } from './render/screens/home.js';
+import { journeyScreen } from './render/screens/journey.js';
 import { gameScreen } from './render/screens/game.js';
 import { pauseScreen } from './render/screens/pause.js';
 import { oopsScreen } from './render/screens/oops.js';
 import { bestScreen } from './render/screens/best.js';
+import { shopScreen } from './render/screens/shop.js';
+import { achievementsScreen } from './render/screens/achievements.js';
 
 const stage = /** @type {HTMLElement} */ (document.getElementById('stage'));
 installViewport(stage);
@@ -18,10 +21,13 @@ registerScreens(stage, {
   splash: splashScreen,
   intro: introScreen,
   home: homeScreen,
+  journey: journeyScreen,
   game: gameScreen,
   pause: pauseScreen,
   oops: oopsScreen,
   best: bestScreen,
+  shop: shopScreen,
+  achievements: achievementsScreen,
 });
 
 go('splash');
