@@ -4,12 +4,13 @@
  * The settings table. PURE — the table and a lookup, nothing else. `storage.js`
  * is the only stateful seam; this module never reads or writes anything.
  *
- * Spec D8: only toggles that DO something ship. There is no audio engine
- * (`grep -rln "Audio\|AudioContext" src/` finds nothing), so Music and Sound
- * Effects are omitted; there is one language and no IAP, so Language and
- * Restore Purchases are omitted; the verb is a full-screen tap, so Left-Handed
- * Mode has nothing to mirror. A switch that looks identical to a working one
- * and silently does nothing teaches the player that the game is broken.
+ * Spec D8: only toggles that DO something ship. Sound Effects is wired to
+ * `src/sound.js`'s WebAudio engine, so it ships; Music remains omitted — a
+ * music loop needs asset files and a mix, out of proportion for this game.
+ * There is one language and no IAP, so Language and Restore Purchases are
+ * omitted; the verb is a full-screen tap, so Left-Handed Mode has nothing to
+ * mirror. A switch that looks identical to a working one and silently does
+ * nothing teaches the player that the game is broken.
  *
  * Adding a row here ships a switch. Do not add one until it takes effect
  * somewhere.
@@ -20,6 +21,7 @@
 /** @type {readonly Setting[]} */
 export const SETTINGS = Object.freeze([
   { key: 'haptics', label: 'Haptics', group: 'GAMEPLAY', def: true },
+  { key: 'sound', label: 'Sound Effects', group: 'GAMEPLAY', def: true },
   { key: 'hints', label: 'Tutorial Hints', group: 'GAMEPLAY', def: true },
   { key: 'motion', label: 'Reduced Motion', group: 'GAMEPLAY', def: false },
   // WIRED HERE, EFFECTED IN TASK 15. Task 15 is droppable (spec Component 8).

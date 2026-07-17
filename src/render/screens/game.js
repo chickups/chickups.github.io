@@ -28,6 +28,7 @@ import { dayNumber, dailySeed } from '../../core/daily.js';
 import { advanceStreak } from '../../core/streak.js';
 import { viewportPoints } from '../../viewport.js';
 import { tap, medium, rigid } from '../../haptics.js';
+import { flap, bounce, feather, thud, fanfare } from '../../sound.js';
 
 const DEG = 180 / Math.PI;
 
@@ -363,6 +364,15 @@ export function gameScreen(go, arg) {
   let acc = 0;
   let stopped = false;
   let prevPhase = state.phase;
+  // Pads and feathers have no haptic equivalent to piggyback on (only phase
+  // transitions do, via prevPhase above), so their sound cues watch the same
+  // core-computed fields directly: lockPad's -1-to-index rising edge is exactly
+  // "just touched a pad" (run.js clears it back to -1 once Peep clears the
+  // pad's own band), and a feathers increase is exactly "just earned some" —
+  // true on both a grab and a pad bounce, so `feather()` is a chain-reward
+  // ting layered on top of `flap()`/`bounce()`, not a replacement for them.
+  let prevLockPad = state.lockPad;
+  let prevFeathers = state.feathers;
 
   function frame(now) {
     if (stopped) return;
@@ -401,8 +411,14 @@ export function gameScreen(go, arg) {
       }
 
       if (state.phase === 'fly' && prevPhase === 'orbit') medium();
-      if (state.phase === 'orbit' && prevPhase === 'fly') tap();
+      if (state.phase === 'orbit' && prevPhase === 'fly') { tap(); flap(); }
       prevPhase = state.phase;
+
+      if (state.lockPad >= 0 && state.lockPad !== prevLockPad) bounce();
+      prevLockPad = state.lockPad;
+
+      if (state.feathers > prevFeathers) feather();
+      prevFeathers = state.feathers;
     }
     if (ticks >= MAX_TICKS) acc = 0;
 
@@ -417,6 +433,10 @@ export function gameScreen(go, arg) {
       // never be misread as a truck hit and buzz rigid over what is meant to be
       // a triumph.
       if (state.phase === 'dead' && state.deathBy === 'truck') rigid();
+      // thud() fires for ANY death (unlike rigid(), truck-only above) — a fall
+      // and a truck hit both end the run the same unhappy way.
+      if (state.phase === 'dead') thud();
+      if (state.phase === 'won') fanfare();
       const metres = scoreOf(state);
       // recordRun does setBest and addFeathers itself. Calling those here too
       // would credit the feathers twice — addFeathers is not idempotent.

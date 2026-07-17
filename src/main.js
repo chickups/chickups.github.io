@@ -4,6 +4,7 @@ import { installStyles, setReducedMotion } from './render/styles.js';
 import { installToasts } from './render/toast.js';
 import { applyContrast } from './render/contrast.js';
 import { initAchievementNotices, initMilestoneNotices, getSetting } from './storage.js';
+import { unlock as unlockSound } from './sound.js';
 import { registerScreens, go } from './render/screens/router.js';
 import { splashScreen } from './render/screens/splash.js';
 import { introScreen } from './render/screens/intro.js';
@@ -25,6 +26,9 @@ import { raceScreen } from './render/screens/race.js';
 // touch would otherwise raise it mid-run, over a game whose only verb is a tap.
 // This suppresses the MENU, not the input — right-click still reaches the page.
 window.addEventListener('contextmenu', (e) => e.preventDefault());
+// AudioContext may only start from a user gesture (autoplay policy); the first
+// tap anywhere unlocks it, well before any run-specific sound needs to play.
+window.addEventListener('pointerdown', unlockSound);
 
 const stage = /** @type {HTMLElement} */ (document.getElementById('stage'));
 installViewport(stage);
