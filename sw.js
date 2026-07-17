@@ -2,7 +2,7 @@
 /* Service worker. Cache-first: the game is fully static, so once installed it
    works offline permanently. Bump CACHE on every deploy to invalidate. */
 
-const CACHE = 'chickup-v3';
+const CACHE = 'chickup-v4';
 
 /** Everything needed to run with no network at all. */
 const PRECACHE = [
@@ -50,6 +50,7 @@ const PRECACHE = [
   './src/render/screens/journey.js',
   './src/render/screens/shop.js',
   './src/render/screens/achievements.js',
+  './src/render/screens/settings.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable-512.png',
