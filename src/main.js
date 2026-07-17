@@ -2,6 +2,7 @@
 import { installViewport } from './viewport.js';
 import { installStyles, setReducedMotion } from './render/styles.js';
 import { installToasts } from './render/toast.js';
+import { applyContrast } from './render/contrast.js';
 import { initAchievementNotices, initMilestoneNotices, getSetting } from './storage.js';
 import { registerScreens, go } from './render/screens/router.js';
 import { splashScreen } from './render/screens/splash.js';
@@ -12,11 +13,13 @@ import { gameScreen } from './render/screens/game.js';
 import { pauseScreen } from './render/screens/pause.js';
 import { oopsScreen } from './render/screens/oops.js';
 import { bestScreen } from './render/screens/best.js';
+import { wonScreen } from './render/screens/won.js';
 import { rewardScreen } from './render/screens/reward.js';
 import { shopScreen } from './render/screens/shop.js';
 import { achievementsScreen } from './render/screens/achievements.js';
 import { settingsScreen } from './render/screens/settings.js';
 import { dailyScreen } from './render/screens/daily.js';
+import { raceScreen } from './render/screens/race.js';
 
 // No browser context menu anywhere: a right-click on desktop or a long-press on
 // touch would otherwise raise it mid-run, over a game whose only verb is a tap.
@@ -34,6 +37,9 @@ installToasts(stage);
 // been told, and only an untouched install may be told everything.
 initAchievementNotices();
 initMilestoneNotices();
+// Before the first screen mounts: a player who turned this on last session must
+// never see one un-styled frame of the game they turned it on for.
+applyContrast(getSetting('contrast'));
 
 registerScreens(stage, {
   splash: splashScreen,
@@ -44,11 +50,13 @@ registerScreens(stage, {
   pause: pauseScreen,
   oops: oopsScreen,
   best: bestScreen,
+  won: wonScreen,
   reward: rewardScreen,
   shop: shopScreen,
   achievements: achievementsScreen,
   settings: settingsScreen,
   daily: dailyScreen,
+  race: raceScreen,
 });
 
 go('splash');

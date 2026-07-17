@@ -1,7 +1,7 @@
 // @ts-check
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makeZones, truckX } from './zones.js';
+import { makeZones, truckX, truckTelling, TRUCK_CYCLE_S, TRUCK_BEATS_PER_CYCLE } from './zones.js';
 import { makeField } from './field.js';
 import { biomeAt, BIOMES } from './biome.js';
 import { ZONES, HAZARD, PHYSICS, PROPS, SCORING, DESIGN } from './tokens.js';
@@ -209,103 +209,89 @@ test('adding zones does not disturb the spine or pad streams', () => {
   }
 });
 
-// --- truckX: pure function of (truck, t), never integrated state -----------
+// --- trucks: a shared beat with a tell ------------------------------------
 
-test('truckX is pure: direct evaluation equals walking t forward in steps', () => {
-  const truck = { y: 12345, dir: /** @type {1} */ (1), speed: HAZARD.truckSpeed, phase: 17.3 };
-  const direct = truckX(truck, 5);
+const SPAN = DESIGN.width + HAZARD.truckW;
+const CROSS_S = SPAN / HAZARD.truckSpeed;
 
-  let walked = 0;
-  const dt = 1 / 60;
-  let x = truckX(truck, 0);
-  while (walked < 5 - 1e-9) {
-    x = truckX(truck, walked + dt);
-    walked += dt;
+test('every truck derives its crossing from ONE shared beat grid', () => {
+  // Spec C4 / doc §13: "trucks cross lanes on a fixed beat (every 1.8s)". Slice 2
+  // gave each truck an independent random phase — the exact opposite. A truck's
+  // only per-truck freedom now is WHICH beat slot it enters on.
+  const trucks = zonesFor(7).trucksInRange(0, HI).slice(0, 40);
+  assert.ok(trucks.length >= 10, `expected plenty of trucks, got ${trucks.length}`);
+  for (const t of trucks) {
+    assert.ok(Number.isInteger(t.beat), `beat must be an integer slot, got ${t.beat}`);
+    assert.ok(t.beat >= 0 && t.beat < TRUCK_BEATS_PER_CYCLE, `beat out of range: ${t.beat}`);
+    assert.equal(t.phase, undefined, 'the per-truck random phase is gone');
   }
-  // truckX at the final walked time must equal a direct call at that same t —
-  // proving the function is a pure closed form, not integrated state.
-  assert.ok(Math.abs(x - truckX(truck, walked)) < 1e-6);
-  assert.ok(Math.abs(walked - 5) < 1e-6);
-  assert.ok(Math.abs(direct - truckX(truck, 5)) < 1e-9);
 });
 
-test('truckX out-of-order calls never drift: repeated evaluation at the same t is stable', () => {
-  const truck = { y: 500, dir: /** @type {-1} */ (-1), speed: HAZARD.truckSpeed, phase: 200 };
-  const a = truckX(truck, 3.7);
-  const b = truckX(truck, 0.1);
-  const c = truckX(truck, 3.7);
-  assert.equal(a, c, 'evaluating an earlier t in between must not perturb a later t');
-  assert.notEqual(a, b);
-});
-
-test('truckX wraps around instead of running off to infinity', () => {
-  const truck = { y: 0, dir: /** @type {1} */ (1), speed: HAZARD.truckSpeed, phase: 0 };
-  const xs = [];
-  for (let t = 0; t < 30; t += 0.25) xs.push(truckX(truck, t));
-  for (const x of xs) {
-    assert.ok(x >= -HAZARD.truckW / 2 - 1e-6 && x <= DESIGN.width + HAZARD.truckW / 2 + 1e-6, `x=${x} escaped the wrap span`);
-  }
-  // Over a long enough run at a fixed speed the truck must actually wrap (not just sit at an edge).
-  const min = Math.min(...xs);
-  const max = Math.max(...xs);
-  assert.ok(max - min > DESIGN.width * 0.5, 'truck never traversed a meaningful span — wrap may be broken');
-});
-
-test('truckX direction: dir=1 moves +x before any wrap, dir=-1 moves -x', () => {
-  const t1 = { y: 0, dir: /** @type {1} */ (1), speed: 50, phase: 0 };
-  const tm1 = { y: 0, dir: /** @type {-1} */ (-1), speed: 50, phase: 0 };
-  assert.ok(truckX(t1, 0.1) > truckX(t1, 0), 'dir 1 should move rightward');
-  assert.ok(truckX(tm1, 0.1) < truckX(tm1, 0), 'dir -1 should move leftward');
-});
-
-// --- truckX: checked against an INDEPENDENT oracle, not against itself -----
-//
-// The tests above compare truckX(...) to other calls of truckX(...) — direct vs.
-// stepped, repeated calls at the same t, before/after a small dt. None of them
-// ever compute an expected x by any means OTHER than calling truckX, so a pure
-// but WRONG implementation (e.g. scaling t by a tiny, wrong factor) passes all
-// of them: the self-comparisons stay internally consistent even while every
-// value is off. That is enough to silently desync a ghost replay against the
-// live truck it's supposed to reproduce. This test computes the expected x by
-// hand from truck.phase/dir/speed and the wrap span (DESIGN.width + HAZARD.truckW),
-// without ever calling truckX for the expected value.
-test('truckX matches an independently computed expectation (oracle), including the wrap', () => {
-  const span = DESIGN.width + HAZARD.truckW;
+test('a truck ENTERS the field exactly on a multiple of truckBeatS', () => {
   const half = HAZARD.truckW / 2;
-
-  /**
-   * Hand-written closed form, deliberately re-derived rather than delegated to
-   * truckX: centre = phase + dir*speed*t, wrapped into [-half, span - half).
-   * @param {{dir:1|-1, speed:number, phase:number}} truck
-   * @param {number} t
-   */
-  function oracleX(truck, t) {
-    const raw = truck.phase + truck.dir * truck.speed * t + half;
-    const wrapped = ((raw % span) + span) % span;
-    return wrapped - half;
-  }
-
-  const trucks = [
-    { y: 0, dir: /** @type {1} */ (1), speed: HAZARD.truckSpeed, phase: 0 },
-    { y: 0, dir: /** @type {-1} */ (-1), speed: HAZARD.truckSpeed, phase: 200 },
-    { y: 500, dir: /** @type {1} */ (1), speed: 37, phase: 411.7 },
-    { y: 500, dir: /** @type {-1} */ (-1), speed: 123.4, phase: 88.8 },
-  ];
-  for (const truck of trucks) {
-    for (let t = 0; t < 40; t += 0.37) {
-      const expected = oracleX(truck, t);
-      const actual = truckX(truck, t);
+  for (const dir of /** @type {(1|-1)[]} */ ([1, -1])) {
+    for (let beat = 0; beat < TRUCK_BEATS_PER_CYCLE; beat++) {
+      const truck = { y: 0, dir, speed: HAZARD.truckSpeed, beat };
+      const entryT = beat * HAZARD.truckBeatS;
+      const x = truckX(truck, entryT);
+      const expected = dir === 1 ? -half : SPAN - half;
       assert.ok(
-        Math.abs(actual - expected) < 1e-6,
-        `truck=${JSON.stringify(truck)} t=${t}: expected ${expected}, got ${actual}`,
+        Math.abs(x - expected) < 1e-9,
+        `dir ${dir} beat ${beat}: entry x ${x}, expected ${expected}`,
       );
+      // And every later entry is still on the grid: the cycle is a whole number
+      // of beats by construction (see TRUCK_CYCLE_S).
+      const x2 = truckX(truck, entryT + TRUCK_CYCLE_S);
+      assert.ok(Math.abs(x2 - expected) < 1e-9, 'entries must stay on the beat, not drift');
     }
   }
+  assert.ok(
+    Math.abs(TRUCK_CYCLE_S / HAZARD.truckBeatS - Math.round(TRUCK_CYCLE_S / HAZARD.truckBeatS)) < 1e-9,
+    'the cycle MUST be a whole number of beats or every truck drifts off the grid',
+  );
+});
 
-  // Explicitly cover the wrap: pick a t guaranteed to wrap the span several
-  // times over, so a broken modulo (or a broken accumulation feeding it)
-  // can't hide by staying inside one lap.
-  const wrapTruck = { y: 0, dir: /** @type {1} */ (1), speed: 100, phase: 0 };
-  const bigT = (span * 3.5) / wrapTruck.speed;
-  assert.ok(Math.abs(truckX(wrapTruck, bigT) - oracleX(wrapTruck, bigT)) < 1e-6, 'wrap case diverged from the oracle');
+test('truckX stays a pure closed form of (truck, t) — ghost replay depends on it', () => {
+  const truck = { y: 0, dir: /** @type {1} */ (1), speed: HAZARD.truckSpeed, beat: 2 };
+  // Called out of order, repeatedly, with no state carried between calls.
+  const a = truckX(truck, 3.3);
+  const b = truckX(truck, 11.9);
+  assert.equal(truckX(truck, 3.3), a);
+  assert.equal(truckX(truck, 11.9), b);
+  assert.equal(truckX(truck, 3.3), a);
+  // And it is periodic in the cycle, never integrated.
+  assert.ok(Math.abs(truckX(truck, 3.3 + TRUCK_CYCLE_S * 5) - a) < 1e-9);
+});
+
+test('truckTelling is true for exactly truckTellS before entry, and never while crossing', () => {
+  const truck = { y: 0, dir: /** @type {1} */ (1), speed: HAZARD.truckSpeed, beat: 0 };
+  // Entry is at t = 0, TRUCK_CYCLE_S, 2*TRUCK_CYCLE_S ... The tell is the window
+  // that CLOSES at each entry.
+  assert.equal(truckTelling(truck, TRUCK_CYCLE_S - 0.001), true, 'telling just before entry');
+  assert.equal(truckTelling(truck, TRUCK_CYCLE_S - HAZARD.truckTellS + 0.001), true, 'telling at the window start');
+  assert.equal(truckTelling(truck, TRUCK_CYCLE_S - HAZARD.truckTellS - 0.001), false, 'silent before the window opens');
+  assert.equal(truckTelling(truck, TRUCK_CYCLE_S), false, 'entry itself is not a tell — it is the event');
+  assert.equal(truckTelling(truck, 0.5), false, 'never telling mid-crossing');
+  assert.equal(truckTelling(truck, CROSS_S + 0.05), false, 'never telling while parked, until the window');
+});
+
+test('a beat truck is fully OFF the field for part of every cycle — occupancy DROPS', () => {
+  // The safety argument for the beat, and it is monotone: a truck now waits
+  // off-field between crossings instead of wrapping continuously, so it is
+  // present LESS of the time than before, never more. See the harbour note.
+  const truck = { y: 0, dir: /** @type {1} */ (1), speed: HAZARD.truckSpeed, beat: 0 };
+  const half = HAZARD.truckW / 2;
+  let onField = 0;
+  const N = 20000;
+  for (let i = 0; i < N; i++) {
+    const t = (i / N) * TRUCK_CYCLE_S;
+    const x = truckX(truck, t);
+    if (x + half > 0 && x - half < DESIGN.width) onField++;
+  }
+  const duty = onField / N;
+  assert.ok(duty < 0.95, `a beat truck must idle off-field; duty cycle was ${duty}`);
+  assert.ok(
+    Math.abs(duty - CROSS_S / TRUCK_CYCLE_S) < 0.02,
+    `duty ${duty} should be ~${CROSS_S / TRUCK_CYCLE_S} (one crossing per cycle)`,
+  );
 });

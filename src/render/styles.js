@@ -77,6 +77,7 @@ const KEYFRAMES = `
 @keyframes gbCloud{0%{transform:translateX(-10px)}100%{transform:translateX(20px)}}
 
 @keyframes truckBob{0%,100%{transform:translateY(0) rotate(-.5deg)}50%{transform:translateY(-2%) rotate(.5deg)}}
+@keyframes truckTell{0%,100%{opacity:.25;transform:scale(.9)}50%{opacity:.9;transform:scale(1.06)}}
 @keyframes puff{0%{transform:translate(0,0) scale(.6);opacity:.5}100%{transform:translate(-40%,-120%) scale(1.6);opacity:0}}
 @keyframes peekBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-12%)}}
 
@@ -121,6 +122,7 @@ function motionOffRules(scope) {
     animation: none !important;
   }
   ${s}[style*="pPop"] { animation: pFade .2s !important; }
+  ${s}[style*="truckTell"] { animation: none !important; opacity: .9 !important; }
   ${s}* { transition-duration: .01ms !important; }
 `;
 }
@@ -130,6 +132,18 @@ const CSS = `${KEYFRAMES}
 ${motionOffRules('')}
 }
 ${motionOffRules('[data-motion="reduce"]')}
+/* Doc §07 High Contrast. Keyed off a data attribute rather than per-element
+   rules: every art module styles inline, and a stylesheet cannot beat an inline
+   style without !important on every single property. A filter on the stage lifts
+   the whole scene at once, and the props/HUD get a hard ink edge so shape reads
+   before colour does — the point of the setting is that colour alone is never
+   the signal. See render/contrast.js. */
+:root[data-hc="1"] #stage {
+  filter: contrast(1.28) saturate(1.35);
+}
+:root[data-hc="1"] #stage * {
+  text-shadow: none !important;
+}
 `;
 
 /**

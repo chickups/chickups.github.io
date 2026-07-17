@@ -1,5 +1,5 @@
 // @ts-check
-import { PHYSICS, SCORING, CAMERA, PROPS, ZONES, HAZARD } from './tokens.js';
+import { PHYSICS, SCORING, CAMERA, PROPS, ZONES, HAZARD, ESCAPE } from './tokens.js';
 import { orbitPosition, stepOrbit, launchVelocity, stepFly, findGrab } from './physics.js';
 import { truckX } from './zones.js';
 import { baseTuning } from './modifier.js';
@@ -44,7 +44,7 @@ export function rateOf(kind) {
 
 /**
  * @typedef {Object} RunState
- * @property {'orbit'|'fly'|'dead'} phase
+ * @property {'orbit'|'fly'|'dead'|'won'} phase
  * @property {number} wheelIndex   wheel currently orbited (meaningless while flying)
  * @property {number} angle        orbit angle, radians
  * @property {number} x            world x, points
@@ -69,7 +69,11 @@ export function rateOf(kind) {
  * @property {number} t            seconds since the run began; accumulated from `dt`,
  *                                 never read from a clock. Feeds `truckX`.
  * @property {'fall'|'truck'} deathBy  cause of death; meaningless (but always a real
- *                                 value) before `phase` is `'dead'`.
+ *                                 value) unless `phase` is `'dead'`. A WIN IS NOT A
+ *                                 DEATH — when phase is 'won' this field says nothing
+ *                                 at all. Every downstream consumer asks *why did the
+ *                                 run end*; encoding a victory as a death would make
+ *                                 each of them wrong in a different way (spec D4).
  */
 
 /**
@@ -109,6 +113,18 @@ export function createRun(field, viewportH) {
 }
 
 /**
+ * Is the run still being played? Both terminal phases ('dead' and 'won') are
+ * final and are stepped no further. Written once, here, rather than as a
+ * `!== 'dead'` at each of the four places that used to ask — adding 'won' to
+ * three of four is a bug that only shows up on the one run per player that wins.
+ * @param {RunState['phase']} phase
+ * @returns {boolean}
+ */
+export function isLive(phase) {
+  return phase === 'orbit' || phase === 'fly';
+}
+
+/**
  * Advance the run by one frame. Pure: returns a new state.
  *
  * One verb: TAP. Peep orbits on his own, a tap launches him, and landing on a
@@ -129,7 +145,7 @@ export function createRun(field, viewportH) {
  * @returns {RunState}
  */
 export function step(state, field, dt, pressed, viewportH, zones = EMPTY_ZONES, tuning = baseTuning()) {
-  if (state.phase === 'dead') return state;
+  if (!isLive(state.phase)) return state;
 
   const s = { ...state };
   s.t = state.t + dt;
@@ -222,14 +238,35 @@ export function step(state, field, dt, pressed, viewportH, zones = EMPTY_ZONES, 
       );
 
     if (padHit) {
-      // No tap, no attach: a pad bypasses the hold-release verb entirely.
-      // vx is untouched, so it grants no steering.
-      // tuning.padBounceMod is the MODIFIER's dial (Bouncy Hay = 1.3), 1.0 at base.
-      // It is NOT `PROPS.padBounceScale`, the contact-speed physics factor — the two
-      // share a name from the interface contract and multiply independently.
-      s.vy = PROPS.padBounce * tuning.padBounceMod;
+      // No tap, no attach: a pad is automatic. `vx` is untouched, so it grants
+      // no steering.
+      //
+      // Contact speed carries into the bounce (doc §13) — see PROPS.padBounceScale
+      // in tokens.js for why the clamp is mandatory and where both bounds come
+      // from. Short version: unbounded, this doubles Peep's height every
+      // pad-to-pad cycle.
+      //
+      // `tuning.padBounceMod` is a DIFFERENT quantity: the Daily Run's Bouncy Hay
+      // dial (1.0 at base, 1.3 on Bouncy Hay), not this contact factor. It is
+      // applied AFTER the clamp deliberately — inside it, padBounceMax would eat
+      // the 1.3 on exactly the fast falls Bouncy Hay exists to reward. Applied
+      // here, the fixed point moves to 480 * mod and the series still terminates.
+      s.vy = Math.min(
+        PROPS.padBounceMax,
+        Math.max(PROPS.padBounceMin, Math.abs(s.vy) * PROPS.padBounceScale),
+      ) * tuning.padBounceMod;
       s.lastWheelY = padHit.pad.y;
       s.lockPad = padHit.index;
+      // Spec D6: a pad is a CHAIN LINK, exactly like a grab — same counter, same
+      // chainPerMult rule, same multMax cap. The doc's literal "x2 pad streak"
+      // was rejected because it would DOWNGRADE a player already at x4 under the
+      // rule below, and because "without touching ground" is meaningless in a
+      // game with no ground.
+      s.chain += 1;
+      if (s.chain % SCORING.chainPerMult === 0) {
+        s.mult = Math.min(SCORING.multMax, s.mult + 1);
+      }
+      s.feathers += s.mult;
     } else {
       // Touching an orbitable prop's band attaches automatically — the player
       // times the launch, never the catch. Each candidate carries its own
@@ -268,19 +305,41 @@ export function step(state, field, dt, pressed, viewportH, zones = EMPTY_ZONES, 
   if (s.y > s.maxY) s.maxY = s.y;
   const desiredCamera = s.maxY - viewportH * CAMERA.peepAnchor;
   if (desiredCamera > s.cameraY) s.cameraY = desiredCamera;
-  if (s.phase !== 'dead' && s.y < s.cameraY) {
+
+  // THE WIN — checked FIRST, and it is a third phase, not a death with a happy
+  // screen (spec D4). The escape truck is PLACED at `tuning.truckHeightM`: a fixed,
+  // deterministic feature at a known height, never a member of zones.js's
+  // wrapping hazard stream, so it can never be missed by generation. It spans the
+  // full field width — reaching its height IS catching it, and there is nothing
+  // to aim at and nothing to miss.
+  //
+  // Read from `tuning`, NOT the raw ESCAPE token: the Low Ceiling daily modifier
+  // lowers the ceiling to 1100m through `RunTuning.truckHeightM`, and a bare
+  // `ESCAPE.truckHeightM` here would silently ignore it — the modifier would
+  // advertise "the truck leaves early" and change nothing. `baseTuning()` seeds
+  // it from ESCAPE.truckHeightM, so a plain run is unchanged.
+  //
+  // Ordering matters: this runs before the fall and truck checks so that a frame
+  // which both reaches the truck and grazes a hazard is a win. Peep is aboard;
+  // the traffic is no longer his problem.
+  const escapeY = tuning.truckHeightM * SCORING.pointsPerMetre;
+  if (s.y + HAZARD.peepHitR >= escapeY - HAZARD.truckH / 2) {
+    s.phase = 'won';
+  }
+
+  if (isLive(s.phase) && s.y < s.cameraY) {
     s.phase = 'dead';
     s.deathBy = 'fall';
   }
 
   // Truck contact: the second failure condition. A rect-vs-circle test —
   // Peep's hitbox (`peepHitR`) is deliberately smaller than his art, so
-  // near-misses read as near. Checked in every phase (orbit or fly): a truck
+  // near-misses read as near. Checked in every live phase (orbit or fly): a truck
   // can clip Peep off a wheel just as easily as out of the air. `truckX` is
   // the pure function of `(truck, s.t)`, never integrated, so this is exactly
   // reproducible from the run clock alone (the point of the whole exercise —
   // a future ghost replay).
-  if (s.phase !== 'dead') {
+  if (isLive(s.phase)) {
     const trucks = zones.trucksInRange(s.y - HAZARD.truckH, s.y + HAZARD.truckH);
     for (const truck of trucks) {
       const tx = truckX(truck, s.t);
@@ -310,4 +369,31 @@ export function step(state, field, dt, pressed, viewportH, zones = EMPTY_ZONES, 
  */
 export function scoreOf(state) {
   return Math.max(0, Math.floor((state.maxY - state.startY) / SCORING.pointsPerMetre));
+}
+
+/**
+ * Which terminal screen a finished run routes to.
+ *
+ * This lives in core/, not in game.js, for one reason: the WON-OVER-BEST rule
+ * fires exactly ONCE per player and is unreachable in ordinary testing, and the
+ * render layer has no test harness. A rule nobody can test is a rule nobody can
+ * trust.
+ *
+ * The rule (spec D4): a player's FIRST escape is necessarily also a new best —
+ * the truck is the permanent ceiling, so 1200m beats anything before it. Both
+ * screens have a claim on that run. The won screen always wins: escaping is the
+ * larger event, and New Best would be a strange anticlimax announcing a record
+ * the player can never break again. The new best is still RECORDED by the
+ * caller's recordRun — only the SCREEN is suppressed.
+ *
+ * After the first escape `best` sits at the ceiling permanently, so every later
+ * win is a win and never a new best, and this rule never fires again.
+ *
+ * @param {RunState} state a finished run
+ * @param {number} best the previous best, in metres, from before this run
+ * @returns {'won'|'best'|'oops'}
+ */
+export function endScreenOf(state, best) {
+  if (state.phase === 'won') return 'won';
+  return scoreOf(state) > best ? 'best' : 'oops';
 }
