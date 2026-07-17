@@ -16,10 +16,11 @@ import { PHYSICS, SCORING, COLORS, PROPS, HAZARD, ZONES } from '../../core/token
 import { makeInput } from '../../input.js';
 import {
   getBest, recordRun, getEquippedOutfit, setDailyBest,
-  getStats, getSeenAchievements, markAchievementsSeen,
+  getStats, getSeenAchievements, markAchievementsSeen, checkMilestones,
 } from '../../storage.js';
 import { pendingUnlocks } from '../../core/achievements.js';
 import { toastAchievement } from '../toast.js';
+import { queueReward } from './reward.js';
 import { dayNumber, dailySeed } from '../../core/daily.js';
 import { viewportPoints } from '../../viewport.js';
 import { tap, medium, rigid } from '../../haptics.js';
@@ -315,6 +316,13 @@ export function gameScreen(go, arg) {
         markAchievementsSeen(unlocked.map((a) => a.key));
         for (const a of unlocked) toastAchievement(a.name);
       }
+
+      // A milestone is the same kind of fact, about the same new totals, and marks
+      // itself seen at grant time for the same reason (see checkMilestones). It only
+      // QUEUES here: §05 sequences the score first, so the reward interstitials when
+      // the player leaves the terminal screen, never on top of it.
+      const rungs = checkMilestones(getStats());
+      if (rungs.length > 0) queueReward(rungs[rungs.length - 1].grant);
 
       const isBest = metres > best;
       go(isBest ? 'best' : 'oops', {
