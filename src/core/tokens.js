@@ -284,3 +284,27 @@ export const HAZARD = Object.freeze({
    */
   truckNudgeRange: TRUCK_EVERY * 0.35,
 });
+
+/**
+ * The lifetime-feather ladder (spec D7). Read against `statTotalFeathers`, NOT the
+ * spendable balance — spending in the shop must never un-earn a milestone.
+ *
+ * Calibrated against shop.js's cost ramp (a good run banks ~70-80 feathers):
+ *  - 250  — about three runs. Lands just after cowboy (120) is affordable, so the
+ *           first rung grants goggles-or-better to a player who bought the hat, and
+ *           the hat itself to one who saved. Either way it is a real gift, not a dupe.
+ *  - 750  — about ten runs. Roughly where cape (700) comes into range.
+ *  - 1500 — about twenty runs. Past the last shop price, so this rung usually pays
+ *           `allOwnedBonus` — a soft landing rather than a fourth outfit that has no art.
+ * Ascending. `passedMilestones` walks this in index order and that order is data.
+ */
+export const MILESTONE = Object.freeze({
+  rungs: Object.freeze([250, 750, 1500]),
+  /**
+   * Feathers granted when every outfit is already owned (D7). Sized at roughly three
+   * runs' banking — enough to feel like a reward, not enough to be a farm. Granted via
+   * `addFeathers` (spendable only), which deliberately does NOT move `statTotalFeathers`:
+   * if it did, a bonus could push the player over the next rung and cascade.
+   */
+  allOwnedBonus: 200,
+});
