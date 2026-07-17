@@ -5,6 +5,7 @@ import { icon } from '../art/icon.js';
 import { primaryButton, secondaryButton, statTile, tabs } from '../ui.js';
 import { COLORS, RACE } from '../../core/tokens.js';
 import { getGhost, getEquippedOutfit } from '../../storage.js';
+import { leaveTo } from './reward.js';
 
 /**
  * Race a Ghost (doc §06).
@@ -103,8 +104,8 @@ export function raceScreen(go, arg) {
         ? metaRow('WIN REWARD', `+${RACE.winReward}`)
         : metaRow('WIN REWARD', `+${RACE.winReward}`, 'Beat the ghost to claim'),
       el('div', { flex: '1', minHeight: px(10) }),
-      primaryButton('Race Again', 'ghost', () => go('game', { race: true })),
-      el('div', { display: 'flex', width: '100%' }, secondaryButton('Home', 'home', () => go('home'))),
+      primaryButton('Race Again', 'ghost', () => leaveTo(go, 'game', { race: true })),
+      el('div', { display: 'flex', width: '100%' }, secondaryButton('Home', 'home', () => leaveTo(go, 'home'))),
     ]);
   }
 

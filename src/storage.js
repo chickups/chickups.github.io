@@ -149,6 +149,20 @@ export function addFeathers(n) {
   write(K.feathers, String(getFeathers() + Math.floor(n)));
 }
 
+/**
+ * Credit EARNED feathers: moves the spendable balance (like {@link addFeathers})
+ * AND the lifetime `statTotalFeathers` that milestones and achievements read.
+ * Use this for prizes that should count toward lifetime totals (e.g. a race win),
+ * as opposed to `addFeathers` (spendable-only bonuses) or `recordRun` (a run's own
+ * banked feathers). Never negative.
+ * @param {number} n
+ */
+export function earnFeathers(n) {
+  const v = Math.max(0, Math.floor(n));
+  addFeathers(v);
+  write(K.statTotalFeathers, String(readNumber(K.statTotalFeathers, 0) + v));
+}
+
 /** @returns {boolean} */
 export const hasSeenIntro = () => readNumber(K.seenIntro, 0) === 1;
 

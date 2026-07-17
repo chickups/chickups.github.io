@@ -51,6 +51,8 @@ import {
   setStreakClaimed,
   getSetting,
   setSetting,
+  getFeathers,
+  earnFeathers,
 } from './storage.js';
 
 /** Reset the stub between tests so each test starts from a clean, empty store. */
@@ -296,4 +298,22 @@ test('getSetting() filters a mixed blob: an unknown key is ignored, a non-boolea
   fakeStorage.setItem('chickup.settings', JSON.stringify({ music: true, haptics: 'yes' }));
   assert.equal(getSetting('music'), false, 'music is not a real setting — must not resurrect as on');
   assert.equal(getSetting('haptics'), true, '"yes" is not a boolean — must fall back to the true default');
+});
+
+test('earnFeathers bumps BOTH spendable and lifetime; can cross a milestone', () => {
+  resetStorage();
+  const spendable0 = getFeathers();
+  const lifetime0 = getStats().totalFeathers;
+  earnFeathers(50);
+  assert.equal(getFeathers(), spendable0 + 50);          // spendable moved
+  assert.equal(getStats().totalFeathers, lifetime0 + 50); // lifetime moved — kills "spendable only"
+});
+
+test('a race prize via earnFeathers can trip a milestone', () => {
+  resetStorage();
+  // Sit just below the first milestone (250), then let the prize cross it.
+  recordRun({ metres: 100, feathers: 210, maxChain: 1, biomeIndex: 0, won: false });
+  assert.equal(checkMilestones(getStats()).length, 0); // 210 < 250, nothing yet
+  earnFeathers(50);                                     // 260 >= 250
+  assert.equal(checkMilestones(getStats()).length, 1); // now it fires — kills "prize doesn't count"
 });

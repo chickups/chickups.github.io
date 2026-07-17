@@ -19,7 +19,7 @@ import { makeRecorder, makeGhostPlayer } from '../../core/ghost.js';
 import {
   getBest, recordRun, getEquippedOutfit, setDailyBest,
   getStats, getSeenAchievements, markAchievementsSeen, checkMilestones,
-  getStreak, setStreak, getSetting, getGhost, setGhost, addFeathers,
+  getStreak, setStreak, getSetting, getGhost, setGhost, earnFeathers,
 } from '../../storage.js';
 import { pendingUnlocks } from '../../core/achievements.js';
 import { toastAchievement } from '../toast.js';
@@ -430,6 +430,13 @@ export function gameScreen(go, arg) {
         biomeIndex: biomeIndexAtY(state.maxY),
         won: state.phase === 'won',
       });
+
+      // A race prize is EARNED feathers: it must count toward lifetime totals and
+      // may itself cross a milestone, so it is credited here — before the
+      // achievement and milestone checks below read getStats().
+      const raceWon = ghost ? scoreOf(state) > ghost.metres : false;
+      if (raceWon) earnFeathers(RACE.winReward);
+
       if (daily) {
         setDailyBest(day, metres);
         // The streak advances on a FINISHED daily run, not on opening the Daily
@@ -469,13 +476,10 @@ export function gameScreen(go, arg) {
         // The race result owns a race's ending: New Best would be a strange
         // second screen arguing about the same run, and the record is kept
         // either way — recordRun ran above. Same shape as the spec's
-        // won-over-best precedence: the larger event owns the screen.
-        const won = metres > ghost.metres;
-        // Separate from recordRun's addFeathers(state.feathers) — this is the
-        // prize, not the run's earnings. addFeathers is not idempotent, so it
-        // must be called exactly once, here.
-        if (won) addFeathers(RACE.winReward);
-        go('race', { result: { metres, ghostMetres: ghost.metres, won } });
+        // won-over-best precedence: the larger event owns the screen. The
+        // prize itself was already credited above, before the achievement and
+        // milestone checks, so it is not paid again here.
+        go('race', { result: { metres, ghostMetres: ghost.metres, won: raceWon } });
         return;
       }
 
