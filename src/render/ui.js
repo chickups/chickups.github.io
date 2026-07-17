@@ -192,3 +192,81 @@ export function card(title, subtitle, opts = {}) {
   }
   return node;
 }
+
+/** `COLORS.cream` at 92% — there is no alpha token; `pill()` above hardcodes the same value. */
+const ICON_BUTTON_BG = 'rgba(255,251,240,.92)';
+const ICON_BUTTON_SHADOW = `0 ${px(3)} 0 rgba(75,53,36,.12)`;
+const ICON_BUTTON_SHADOW_PRESSED = '0 0px 0 rgba(75,53,36,.12)';
+
+/**
+ * §11's Icon button. Hoisted from four near-identical copies (home's `navButton`,
+ * and the back buttons in shop / achievements / journey), which differed only in
+ * glyph size (20 vs 22 — unified to a derived 21) and glyph colour (an opt).
+ *
+ * Positioning is deliberately NOT this component's job: `pressable` writes
+ * `node.style.transform`, so a positioning transform here would fight the lip.
+ * Callers that need placement wrap this in a positioned `el('div', …)`.
+ *
+ * @param {string} glyph a key from `render/art/icon.js` — only glyphs that exist
+ * @param {() => void} onTap
+ * @param {{size?: number, bg?: string, color?: string}} [opts]
+ * @returns {HTMLElement}
+ */
+export function iconButton(glyph, onTap, opts = {}) {
+  // Floored, not defaulted: §11's >=44pt target is not a caller's to opt out of.
+  const size = Math.max(TAP_MIN, opts.size ?? TAP_MIN);
+  const bg = opts.bg ?? ICON_BUTTON_BG;
+  const color = opts.color ?? COLORS.ink;
+  const node = el(
+    'div',
+    {
+      flex: 'none',
+      width: px(size), height: px(size), borderRadius: '50%',
+      background: bg,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      cursor: 'pointer',
+      boxShadow: ICON_BUTTON_SHADOW,
+      transition: 'transform .08s, box-shadow .08s',
+    },
+    icon(glyph, Math.round(size * 0.47), color),
+  );
+  pressable(node, 3, ICON_BUTTON_SHADOW, ICON_BUTTON_SHADOW_PRESSED, onTap);
+  return node;
+}
+
+/** The lip under a destructive fill. Brown, matching `primaryButton`'s ambient
+ *  shadow family — there is no dark-red token and `ui.js` may not invent one. */
+const DESTRUCTIVE_SHADOW = `0 ${px(4)} 0 rgba(75,53,36,.28)`;
+const DESTRUCTIVE_SHADOW_PRESSED = '0 0px 0 rgba(75,53,36,.28)';
+
+/**
+ * §11's Destructive button. Same footprint as `secondaryButton` — `flex: '1'`,
+ * so it drops into the same action rows — but a red fill rather than cream, so
+ * "Quit Run" never reads as just another neutral choice.
+ *
+ * @param {string} label
+ * @param {string|null} glyph
+ * @param {() => void} onTap
+ * @returns {HTMLElement}
+ */
+export function destructiveButton(label, glyph, onTap) {
+  const node = el(
+    'div',
+    {
+      flex: '1',
+      minHeight: px(TAP_MIN),
+      cursor: 'pointer',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: px(8),
+      background: COLORS.red, color: COLORS.cream,
+      font: `800 ${px(17)} 'Baloo 2'`,
+      padding: `${px(13)} 0`,
+      borderRadius: px(20),
+      boxShadow: DESTRUCTIVE_SHADOW,
+      transition: 'transform .08s, box-shadow .08s',
+    },
+    glyph ? icon(glyph, 18, COLORS.cream) : null,
+    label,
+  );
+  pressable(node, 4, DESTRUCTIVE_SHADOW, DESTRUCTIVE_SHADOW_PRESSED, onTap);
+  return node;
+}

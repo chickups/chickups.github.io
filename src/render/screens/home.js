@@ -5,28 +5,10 @@ import { tire } from '../art/tire.js';
 import { truck } from '../art/truck.js';
 import { logo } from '../art/logo.js';
 import { icon } from '../art/icon.js';
-import { primaryButton, pill, card, TAP_MIN } from '../ui.js';
+import { primaryButton, pill, card, iconButton } from '../ui.js';
 import { COLORS } from '../../core/tokens.js';
 import { getFeathers, markIntroSeen, getEquippedOutfit, getDailyBest } from '../../storage.js';
 import { dayNumber } from '../../core/daily.js';
-
-/**
- * A round top-bar entry point, matching the Journey button's style. Used for
- * Journey, Shop and Achievements so all three read as one family of buttons.
- * @param {string} glyph
- * @param {(name: string, arg?: any) => void} go
- * @param {string} screen
- * @returns {HTMLElement}
- */
-function navButton(glyph, go, screen) {
-  const node = el('div', {
-    width: px(TAP_MIN), height: px(TAP_MIN), borderRadius: '50%',
-    background: 'rgba(255,251,240,.92)', boxShadow: '0 3px 0 rgba(75,53,36,.12)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-  }, icon(glyph, 20, COLORS.orangeD));
-  node.addEventListener('click', () => go(screen));
-  return node;
-}
 
 /**
  * The daily route's subtitle. Reads the clock here in render/, never in core/:
@@ -75,10 +57,10 @@ export function homeScreen(go) {
       el(
         'div',
         { display: 'flex', gap: px(8) },
-        navButton('map', go, 'journey'),
-        navButton('shirt', go, 'shop'),
-        navButton('trophy', go, 'achievements'),
-        navButton('gear', go, 'settings'),
+        iconButton('map', () => go('journey'), { color: COLORS.orangeD }),
+        iconButton('shirt', () => go('shop'), { color: COLORS.orangeD }),
+        iconButton('trophy', () => go('achievements'), { color: COLORS.orangeD }),
+        iconButton('gear', () => go('settings'), { color: COLORS.orangeD }),
       ),
     ),
     el('div', { position: 'absolute', top: px(200), left: '50%', transform: 'translateX(-46%) scale(.62)' }, truck(120)),
