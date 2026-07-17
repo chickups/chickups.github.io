@@ -87,8 +87,15 @@ export function bestScreen(go, arg) {
     // in the slice-3 spec's Out of Scope table: there is NO Share button here.
     // The `share` glyph exists in art/icon.js, which makes this look like an
     // oversight. It is not. Do not add one.
+    // Bottom-anchored, NOT a fixed top. `viewport.js` derives design-space height
+    // as `innerHeight / s`, so it varies per device — a fixed `top` here and the
+    // button block's `bottom: px(52)` below drift toward each other on short
+    // viewports and collide (measured on 375x667: the old top:452 put Peep's feet
+    // 96pt past the button block's top edge). Anchoring both to `bottom` makes
+    // the gap between them (233 - 213 = 20pt) constant across every device, so
+    // they cannot collide by construction. Do not "fix" this back to a fixed top.
     el('div', {
-      position: 'absolute', top: px(452), left: '50%', transform: 'translateX(-50%)',
+      position: 'absolute', bottom: px(233), left: '50%', transform: 'translateX(-50%)',
       zIndex: '3', animation: 'pFloat 2s ease-in-out infinite',
     }, peep(130, 'celebrate')),
     el(
