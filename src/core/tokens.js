@@ -411,8 +411,10 @@ export const MODIFIER = Object.freeze({
  *           first rung grants goggles-or-better to a player who bought the hat, and
  *           the hat itself to one who saved. Either way it is a real gift, not a dupe.
  *  - 750  — about ten runs. Roughly where cape (700) comes into range.
- *  - 1500 — about twenty runs. Past the last shop price, so this rung usually pays
- *           `allOwnedBonus` — a soft landing rather than a fourth outfit that has no art.
+ *  - 1500 — about twenty runs. Still below the full outfit ladder's total cost
+ *           (cowboy 120 + goggles 300 + cape 700 + scarf 1200 + crown 2000 = 4320
+ *           lifetime feathers), so this rung grants the cheapest still-unowned outfit;
+ *           `allOwnedBonus` only pays once every outfit is owned, well past this rung.
  * Ascending. `passedMilestones` walks this in index order and that order is data.
  */
 export const MILESTONE = Object.freeze({
