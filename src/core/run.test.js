@@ -1,10 +1,11 @@
 // @ts-check
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createRun, step, scoreOf, radiusOf, rateOf } from './run.js';
+import { createRun, step, scoreOf, radiusOf, rateOf, endScreenOf } from './run.js';
 import { makeField } from './field.js';
-import { PHYSICS, SCORING, PROPS, ZONES, HAZARD, FIELD } from './tokens.js';
+import { PHYSICS, SCORING, PROPS, ZONES, HAZARD, FIELD, ESCAPE } from './tokens.js';
 import { baseTuning } from './modifier.js';
+import { BIOMES } from './biome.js';
 
 const VH = 852;
 const DT = 1 / 60;
@@ -705,4 +706,146 @@ test('a pad is a chain link: it steps chain, mult and feathers exactly like a gr
   // feathers += mult at each link, with mult still 1 on the third (it steps
   // after banking is not the rule — the grab path steps mult first, then banks).
   assert.deepEqual(seen.map((e) => e.feathers), [1, 2, 4]);
+});
+
+// --- the win state ---------------------------------------------------------
+
+/** World y of the escape truck's centre. */
+const ESCAPE_Y = ESCAPE.truckHeightM * SCORING.pointsPerMetre;
+
+/** Peep at `y`, mid-flight, on a real field, with a camera that cannot kill him. */
+function flyingAt(f, y) {
+  return {
+    ...createRun(f, BIG_VH),
+    phase: /** @type {'fly'} */ ('fly'),
+    x: 100,
+    y,
+    vx: 0,
+    vy: 10,
+    maxY: y,
+    cameraY: -1e9,
+    lastWheelY: -1e9,
+    lockWheel: -1,
+    lockPad: -1,
+  };
+}
+
+test('a run reaching the escape truck ends WON, not dead, and banks its distance', () => {
+  const f = makeField(1);
+  // Just below contact, still climbing — at a real launch speed. flyingAt's
+  // default vy:10 is fine for the "already past the truck" tests below (they
+  // start well above contact), but at vy:10 Peep is essentially at the apex of
+  // his arc already (max further rise = 10^2/(2*280) = 0.18pt) and can never
+  // close a 5pt gap, in one frame or a thousand. A launch's actual climbing
+  // speed (orbitRate * orbitRadius * launchBoost, the same v the REACHABILITY
+  // test below uses) can.
+  const v = PHYSICS.orbitRate * PHYSICS.orbitRadius * PHYSICS.launchBoost;
+  const s0 = { ...flyingAt(f, ESCAPE_Y - HAZARD.truckH / 2 - HAZARD.peepHitR - 5), vy: v };
+  assert.equal(s0.phase, 'fly');
+  const s1 = step(s0, f, DT, false, BIG_VH);
+  assert.equal(s1.phase, 'won', 'reaching the truck is a WIN — a third phase, not a death');
+  // Contact fires at the truck rect's BOTTOM edge, not its centre, and scoreOf
+  // measures climbed distance from startY (the TOP of wheel 0's orbit, one
+  // orbitRadius above the wheel) rather than raw world height. Both are legitimate,
+  // permanent offsets from ESCAPE.truckHeightM — roughly (truckH/2 + peepHitR +
+  // orbitRadius)/pointsPerMetre =~ 11.2m here — not slack to shave the tolerance to
+  // near zero.
+  assert.ok(scoreOf(s1) >= ESCAPE.truckHeightM - 20, `distance must be banked, got ${scoreOf(s1)}m`);
+});
+
+test('a won run is terminal and never becomes a death', () => {
+  const f = makeField(1);
+  let s = step(flyingAt(f, ESCAPE_Y), f, DT, false, BIG_VH);
+  assert.equal(s.phase, 'won');
+  // Drive it hard: gravity, the fall check and the truck check all get their
+  // chance. A win must survive every one of them.
+  for (let i = 0; i < 600; i++) s = step(s, f, DT, true, 852);
+  assert.equal(s.phase, 'won', 'a win must be terminal — step returns it untouched');
+});
+
+test('the escape truck is PLACED, not rolled: no seed can generate a run past it', () => {
+  // It is a fixed deterministic feature at a known height, NOT a member of the
+  // wrapping hazard-truck stream in zones.js. It must never be missable-by-
+  // generation, so every seed must stop at exactly the same ceiling.
+  for (const seed of [1, 2, 3, 7, 99, 12345]) {
+    const f = makeField(seed);
+    const s = step(flyingAt(f, ESCAPE_Y), f, DT, false, BIG_VH);
+    assert.equal(s.phase, 'won', `seed ${seed} must hit the same ceiling`);
+  }
+});
+
+test('REACHABILITY: the escape truck is reachable from the spine props below it', () => {
+  // THE critical risk of this task. Get this wrong and the game's ending is
+  // literally unreachable — the player climbs to a wall and the run can only
+  // ever end in a fall.
+  //
+  // From the TUNING NOTE: v = orbitRate * orbitRadius * launchBoost; maxRise =
+  // v^2 / (2*gravity). Launching straight up from the TOP of an orbit starts one
+  // orbit radius above the prop's centre, so the highest y a launch from prop p
+  // can reach is p.y + orbitRadius + maxRise.
+  const v = PHYSICS.orbitRate * PHYSICS.orbitRadius * PHYSICS.launchBoost;
+  const maxRise = (v * v) / (2 * PHYSICS.gravity);
+  const contactY = ESCAPE_Y - HAZARD.truckH / 2 - HAZARD.peepHitR;
+
+  for (const seed of [1, 2, 3, 4, 5, 7, 11, 99, 12345, 65535]) {
+    const f = makeField(seed);
+    // The highest spine prop strictly below the contact height.
+    let highest = null;
+    for (let i = 0; ; i++) {
+      const p = f.propAt(i);
+      if (p.y >= contactY) break;
+      highest = p;
+    }
+    assert.ok(highest, `seed ${seed}: no prop below the truck at all`);
+    // A tire's radius is the SMALLER of the two (a gear's is 1.25x), so using it
+    // is the conservative reading whatever kind the prop turns out to be.
+    const reach = highest.y + PHYSICS.orbitRadius + maxRise;
+    assert.ok(
+      reach >= contactY,
+      `seed ${seed}: UNREACHABLE ENDING. Highest prop ${highest.y.toFixed(1)} reaches ` +
+        `${reach.toFixed(1)}, truck contact at ${contactY.toFixed(1)} — short by ` +
+        `${(contactY - reach).toFixed(1)}pt`,
+    );
+  }
+});
+
+test('GUARD: the spine can never grow a gap that walls the truck off', () => {
+  // The reachability test above samples seeds. This one is the invariant behind
+  // it, and it is what actually keeps the ending safe as gapMax gets tuned:
+  // props sit at most FIELD.gapMax apart, so the highest prop below the truck is
+  // at most gapMax below it. Reaching it needs maxRise >= gapMax.
+  const v = PHYSICS.orbitRate * PHYSICS.orbitRadius * PHYSICS.launchBoost;
+  const maxRise = (v * v) / (2 * PHYSICS.gravity);
+  assert.ok(
+    maxRise > FIELD.gapMax,
+    `maxRise (${maxRise}) must exceed FIELD.gapMax (${FIELD.gapMax}) or the ending walls off`,
+  );
+});
+
+test('the escape truck sits inside The Great Escape, above where it opens', () => {
+  const escape = BIOMES[BIOMES.length - 1];
+  assert.equal(escape.key, 'escape');
+  assert.ok(
+    ESCAPE.truckHeightM > escape.fromM,
+    `the truck (${ESCAPE.truckHeightM}m) must sit inside its own biome (opens ${escape.fromM}m)`,
+  );
+});
+
+test('WON TAKES PRECEDENCE OVER BEST', () => {
+  // Fires exactly ONCE per player and is therefore unreachable in ordinary
+  // testing, which is precisely why it is written down and tested here.
+  //
+  // A player's first escape is NECESSARILY also a new best — the truck is the
+  // ceiling (spec D4), so 1200m beats anything before it. Both screens have a
+  // claim on that run. The won screen wins; the best is still RECORDED, only the
+  // screen is suppressed.
+  const won = { phase: /** @type {'won'} */ ('won'), maxY: 12000, startY: 0 };
+  assert.equal(endScreenOf(won, 0), 'won', 'a first escape is also a new best — won still wins');
+  assert.equal(endScreenOf(won, 500), 'won');
+  assert.equal(endScreenOf(won, 99999), 'won', 'and a win is a win even when it is not a best');
+
+  const dead = { phase: /** @type {'dead'} */ ('dead'), maxY: 8420, startY: 0 };
+  assert.equal(endScreenOf(dead, 500), 'best', 'a death that beats the record is still a best');
+  assert.equal(endScreenOf(dead, 900), 'oops', 'a death that does not is an oops');
+  assert.equal(endScreenOf(dead, 842), 'oops', 'ties are not bests — best is a strict max');
 });

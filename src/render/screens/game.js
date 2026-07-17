@@ -11,7 +11,7 @@ import { updraft } from '../art/updraft.js';
 import { makeField } from '../../core/field.js';
 import { makeZones, truckX, truckTelling } from '../../core/zones.js';
 import { biomeAtY, biomeIndexAtY } from '../../core/biome.js';
-import { createRun, step, scoreOf, radiusOf } from '../../core/run.js';
+import { createRun, step, scoreOf, radiusOf, isLive, endScreenOf } from '../../core/run.js';
 import { PHYSICS, SCORING, COLORS, PROPS, HAZARD, ZONES, RACE } from '../../core/tokens.js';
 import { modifierForDay, applyModifier, baseTuning } from '../../core/modifier.js';
 import { makeInput } from '../../input.js';
@@ -374,7 +374,7 @@ export function gameScreen(go, arg) {
 
     const h = viewportPoints().h;
     let ticks = 0;
-    while (acc >= FIXED_DT && ticks < MAX_TICKS && state.phase !== 'dead') {
+    while (acc >= FIXED_DT && ticks < MAX_TICKS && isLive(state.phase)) {
       acc -= FIXED_DT;
       ticks++;
       // Polled once per TICK, not once per frame: isPressed() consumes the press
@@ -409,10 +409,14 @@ export function gameScreen(go, arg) {
     syncProps(state.cameraY - CULL_BAND, state.cameraY + h + CULL_BAND);
     paint();
 
-    if (state.phase === 'dead') {
+    if (!isLive(state.phase)) {
       stopped = true;
-      // §12: collision · rigid. A fall is not a collision — it fires nothing, by design.
-      if (state.deathBy === 'truck') rigid();
+      // §12: collision · rigid. A fall is not a collision — it fires nothing, by
+      // design. A win is not a collision either: `state.deathBy` is meaningless
+      // once phase is 'won' (run.js) — gated on phase === 'dead' so a win can
+      // never be misread as a truck hit and buzz rigid over what is meant to be
+      // a triumph.
+      if (state.phase === 'dead' && state.deathBy === 'truck') rigid();
       const metres = scoreOf(state);
       // recordRun does setBest and addFeathers itself. Calling those here too
       // would credit the feathers twice — addFeathers is not idempotent.
@@ -474,8 +478,12 @@ export function gameScreen(go, arg) {
         return;
       }
 
-      const isBest = metres > best;
-      go(isBest ? 'best' : 'oops', {
+      // endScreenOf, not a local ternary: a WIN takes precedence over a NEW BEST
+      // (spec D4). The first escape is necessarily also a best, so both screens
+      // would claim that run — the won screen wins, and the best is still
+      // recorded above by recordRun. That rule fires once per player and lives in
+      // core/ because it is untestable from here.
+      go(endScreenOf(state, best), {
         score: metres,
         best: Math.max(best, metres),
         previousBest: best,
