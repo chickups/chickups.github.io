@@ -24,6 +24,46 @@ export const COLORS = Object.freeze({
   grassD: '#7BC93F',
   muted: '#8a7358',
   red: '#E0453A',
+  /** The three tones `gamebg.js` hand-tuned for its original (pre-biome) sky,
+   *  hoisted verbatim so `BIOME_SKY.roadside` reproduces slice 1's look exactly. */
+  skyPale: '#BFE7FB',
+  skyPaleMid: '#A9DDF5',
+  skyMeadow: '#9ED66B',
+  /** A near-black dusk, for The Great Escape's finale sky. `ink` alone reads as
+   *  warm brown, not night — this is the one biome that genuinely needs it. */
+  nightFall: '#2E1B12',
+});
+
+/**
+ * Per-biome sky gradient stops (doc §13's six-biome ascent), keyed by `BIOMES[].key`
+ * in `core/biome.js`. `gamebg.js` joins these into a `linear-gradient(180deg, ...)`.
+ * `roadside` MUST stay pixel-identical to slice 1's baseline sky.
+ */
+export const BIOME_SKY = Object.freeze({
+  roadside: Object.freeze([
+    `${COLORS.skyPale} 0%`, `${COLORS.skyPaleMid} 16%`, `${COLORS.skyMeadow} 34%`,
+    `${COLORS.grass} 60%`, `${COLORS.grassD} 100%`,
+  ]),
+  orchard: Object.freeze([
+    `${COLORS.skyTop} 0%`, `${COLORS.skyMid} 20%`, `${COLORS.yellowL} 45%`,
+    `${COLORS.grass} 72%`, `${COLORS.grassD} 100%`,
+  ]),
+  ridge: Object.freeze([
+    `${COLORS.skyTop} 0%`, `${COLORS.skyMid} 35%`, `${COLORS.creamDeep} 65%`,
+    `${COLORS.muted} 100%`,
+  ]),
+  factory: Object.freeze([
+    `${COLORS.muted} 0%`, `${COLORS.goldD} 35%`, `${COLORS.orangeDD} 70%`,
+    `${COLORS.ink} 100%`,
+  ]),
+  highway: Object.freeze([
+    `${COLORS.gold} 0%`, `${COLORS.yellowD} 25%`, `${COLORS.orange} 50%`,
+    `${COLORS.orangeD} 75%`, `${COLORS.orangeDD} 100%`,
+  ]),
+  escape: Object.freeze([
+    `${COLORS.nightFall} 0%`, `${COLORS.ink} 28%`, `${COLORS.orangeDD} 55%`,
+    `${COLORS.red} 78%`, `${COLORS.orange} 100%`,
+  ]),
 });
 
 /**

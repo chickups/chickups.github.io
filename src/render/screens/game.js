@@ -10,7 +10,7 @@ import { hazardTruck } from '../art/hazardTruck.js';
 import { updraft } from '../art/updraft.js';
 import { makeField } from '../../core/field.js';
 import { makeZones, truckX } from '../../core/zones.js';
-import { biomeIndexAt } from '../../core/biome.js';
+import { biomeAt, biomeIndexAt } from '../../core/biome.js';
 import { createRun, step, scoreOf, radiusOf } from '../../core/run.js';
 import { PHYSICS, SCORING, COLORS, PROPS, HAZARD } from '../../core/tokens.js';
 import { makeInput } from '../../input.js';
@@ -81,8 +81,9 @@ export function gameScreen(go, arg) {
   world.appendChild(peepEl);
 
   const hud = makeHud(() => go('pause', { state, seed }));
+  const bg = gamebg(world);
   const root = el('div', { position: 'absolute', inset: '0px', cursor: 'pointer' },
-    gamebg(world), hud.root);
+    bg.root, hud.root);
 
   // --- prop pooling ----------------------------------------------------
   /**
@@ -214,7 +215,10 @@ export function gameScreen(go, arg) {
     let tip = '';
     if (!state.everLaunched) tip = TIP_TAP;
     else if (!state.everGrabbed) tip = TIP_LAND;
-    hud.update(scoreOf(state), state.mult, tip);
+
+    const biome = biomeAt(scoreOf(state));
+    bg.setSky(biome.key);
+    hud.update(scoreOf(state), state.mult, tip, biome.key);
   }
 
   // --- loop ------------------------------------------------------------
