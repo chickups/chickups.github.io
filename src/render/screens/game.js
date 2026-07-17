@@ -13,6 +13,7 @@ import { makeZones, truckX } from '../../core/zones.js';
 import { biomeAtY, biomeIndexAtY } from '../../core/biome.js';
 import { createRun, step, scoreOf, radiusOf } from '../../core/run.js';
 import { PHYSICS, SCORING, COLORS, PROPS, HAZARD, ZONES } from '../../core/tokens.js';
+import { modifierForDay, applyModifier, baseTuning } from '../../core/modifier.js';
 import { makeInput } from '../../input.js';
 import {
   getBest, recordRun, getEquippedOutfit, setDailyBest,
@@ -58,8 +59,13 @@ export function gameScreen(go, arg) {
   const daily = Boolean(arg && arg.daily);
   const day = dayNumber(Date.now(), new Date().getTimezoneOffset());
   const seed = daily ? dailySeed(day) : ((Date.now() >>> 0) || 1);
-  const field = makeField(seed);
-  const zones = makeZones(seed, field);
+  // The route comes from the seed; the RULES come from the modifier. Two separate
+  // jobs, deliberately: `dailySeed` identifies which route today is, and
+  // `modifierForDay` picks which of the seven modifiers is applied to it. A plain
+  // run gets `baseTuning()`, which is every token default — i.e. no change at all.
+  const tuning = daily ? applyModifier(modifierForDay(day)) : baseTuning();
+  const field = makeField(seed, tuning);
+  const zones = makeZones(seed, field, tuning);
   let state = createRun(field, vp.h);
 
   const best = getBest();
@@ -278,7 +284,7 @@ export function gameScreen(go, arg) {
       // Polled once per TICK, not once per frame: isPressed() consumes the press
       // latch, so a tap that came and went between frames still lands on exactly
       // one tick.
-      state = step(state, field, FIXED_DT, input.isPressed(), h, zones);
+      state = step(state, field, FIXED_DT, input.isPressed(), h, zones, tuning);
       if (state.chain > maxChain) maxChain = state.chain;
 
       if (state.phase === 'fly' && prevPhase === 'orbit') medium();
