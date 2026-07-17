@@ -6,6 +6,7 @@ import { primaryButton, secondaryButton, statTile, pill } from '../ui.js';
 import { COLORS } from '../../core/tokens.js';
 import { success } from '../../haptics.js';
 import { leaveTo } from './reward.js';
+import { shareText } from '../../share.js';
 
 /**
  * @param {(name: string) => void} go
@@ -84,10 +85,10 @@ export function bestScreen(go, arg) {
       }, 'REWARD'),
       pill('feather', `+${arg.feathers}`, COLORS.yellowD),
     ),
-    // Deliberate omission, carried forward from the slice-1 spec and re-affirmed
-    // in the slice-3 spec's Out of Scope table: there is NO Share button here.
-    // The `share` glyph exists in art/icon.js, which makes this look like an
-    // oversight. It is not. Do not add one.
+    // The slice-1/slice-3 "no Share button here" omission (carried forward and
+    // re-affirmed in the slice-3 spec's Out of Scope table) is now superseded by
+    // the slice-4 spec (§B, "Share a run"), which explicitly calls for a Share
+    // button on both Won and Best. See the button block below.
     // Bottom-anchored, NOT a fixed top. `viewport.js` derives design-space height
     // as `innerHeight / s`, so it varies per device — a fixed `top` here and the
     // button block's `bottom: px(52)` below drift toward each other on short
@@ -104,7 +105,12 @@ export function bestScreen(go, arg) {
       { position: 'absolute', left: px(24), right: px(24), bottom: px(52), zIndex: '5' },
       primaryButton('Go Again', 'play', () => leaveTo(go, 'game'), { size: 24, lip: 6 }),
       el('div', { height: px(12) }),
-      el('div', { display: 'flex', gap: px(12) }, secondaryButton('Home', 'home', () => leaveTo(go, 'home'))),
+      el(
+        'div',
+        { display: 'flex', gap: px(12) },
+        secondaryButton('Home', 'home', () => leaveTo(go, 'home')),
+        secondaryButton('Share', 'share', () => shareText(`New best in Chick Up: ${arg.score} m 🐣`)),
+      ),
     ),
   );
 }

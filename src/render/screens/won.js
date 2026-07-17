@@ -7,6 +7,7 @@ import { primaryButton, secondaryButton, statTile } from '../ui.js';
 import { COLORS } from '../../core/tokens.js';
 import { success } from '../../haptics.js';
 import { leaveTo } from './reward.js';
+import { shareText } from '../../share.js';
 
 /**
  * The Great Escape, caught. Peep is on the truck.
@@ -88,7 +89,12 @@ export function wonScreen(go, arg) {
       { position: 'absolute', left: px(24), right: px(24), bottom: px(52), zIndex: '5' },
       primaryButton('Go Again', 'play', () => leaveTo(go, 'game'), { size: 24, lip: 6 }),
       el('div', { height: px(12) }),
-      el('div', { display: 'flex', gap: px(12) }, secondaryButton('Home', 'home', () => leaveTo(go, 'home'))),
+      el(
+        'div',
+        { display: 'flex', gap: px(12) },
+        secondaryButton('Home', 'home', () => leaveTo(go, 'home')),
+        secondaryButton('Share', 'share', () => shareText(`I escaped Chick Up in ${arg.score} m 🐣`)),
+      ),
     ),
   );
 }

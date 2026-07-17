@@ -2,7 +2,7 @@
 import { el, px } from './el.js';
 import { icon } from './art/icon.js';
 import { COLORS } from '../core/tokens.js';
-import { success } from '../haptics.js';
+import { success, tap } from '../haptics.js';
 
 /**
  * Achievement toasts: a banner that drops in from the top, celebrates, and leaves.
@@ -42,7 +42,11 @@ const CONF_TOP = 34;
 
 /** @type {HTMLElement|null} */
 let host = null;
-/** @type {string[]} */
+/**
+ * One shared queue for both toast kinds, so an achievement and a plain message
+ * never overlap on screen — they simply take turns.
+ * @type {Array<{text: string, kind: 'achievement'|'message'}>}
+ */
 const queue = [];
 let showing = false;
 
@@ -71,19 +75,32 @@ export function installToasts(stage) {
  */
 export function toastAchievement(name) {
   if (!host) return;
-  queue.push(name);
+  queue.push({ text: name, kind: 'achievement' });
+  pump();
+}
+
+/**
+ * Queue a plain confirmation toast — no trophy badge, no confetti, no
+ * "Achievement" eyebrow. Used for feedback that isn't a celebration, e.g. sharing's
+ * "Copied to clipboard" fallback. Same host/queue/choreography as
+ * `toastAchievement`, so the two never stack.
+ * @param {string} text
+ */
+export function toastMessage(text) {
+  if (!host) return;
+  queue.push({ text, kind: 'message' });
   pump();
 }
 
 /** Show the next queued toast, if one is waiting and none is on screen. */
 function pump() {
   if (showing || queue.length === 0 || !host) return;
-  const name = /** @type {string} */ (queue.shift());
+  const item = /** @type {{text: string, kind: 'achievement'|'message'}} */ (queue.shift());
   showing = true;
 
-  const node = banner(name);
+  const node = item.kind === 'achievement' ? banner(item.text) : messageBanner(item.text);
   host.appendChild(node);
-  success();
+  if (item.kind === 'achievement') success(); else tap();
 
   setTimeout(() => {
     node.style.animation = `toastOut ${OUT_MS}ms ease-in forwards`;
@@ -161,6 +178,38 @@ function banner(name) {
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }, name),
       ),
+    ),
+  );
+}
+
+/**
+ * A plain confirmation toast — same drop-in/hold/drop-out choreography and CSS
+ * keyframes as the achievement banner, but visually quiet: a small check glyph
+ * instead of the trophy badge, no "Achievement" eyebrow, no confetti.
+ * @param {string} text
+ * @returns {HTMLElement}
+ */
+function messageBanner(text) {
+  return el(
+    'div',
+    {
+      position: 'absolute',
+      top: px(56), left: px(16), right: px(16),
+      animation: `toastIn ${IN_MS}ms cubic-bezier(.2,1.5,.5,1) both`,
+    },
+    el(
+      'div',
+      {
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: px(10),
+        background: COLORS.cream, borderRadius: px(20),
+        padding: `${px(10)} ${px(16)}`,
+        boxShadow: '0 5px 0 rgba(75,53,36,.14), 0 10px 24px rgba(75,53,36,.18)',
+      },
+      icon('check', 20, COLORS.orangeD),
+      el('div', {
+        font: `800 ${px(15)} 'Nunito'`, color: COLORS.ink,
+        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+      }, text),
     ),
   );
 }

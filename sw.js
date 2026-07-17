@@ -15,6 +15,7 @@ const PRECACHE = [
   './src/input.js',
   './src/haptics.js',
   './src/sound.js',
+  './src/share.js',
   './src/core/tokens.js',
   './src/core/rng.js',
   './src/core/physics.js',
