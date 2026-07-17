@@ -1,7 +1,7 @@
 // @ts-check
 import { makeRng } from './rng.js';
-import { FIELD, SCORING, PROPS } from './tokens.js';
-import { biomeAt } from './biome.js';
+import { FIELD, PROPS } from './tokens.js';
+import { biomeAtY } from './biome.js';
 
 /** @typedef {{x:number, y:number}} Wheel */
 /** @typedef {{x:number, y:number, kind:'tire'|'gear'}} Prop */
@@ -70,7 +70,7 @@ export function makeField(seed) {
       // this order, regardless of biome. Reordering or skipping a draw would
       // make the PRNG sequence depend on the biome table.
       const x = col + (rng() * 2 - 1) * FIELD.jitter;
-      const biome = biomeAt(y / SCORING.pointsPerMetre);
+      const biome = biomeAtY(y);
       const kind = pickKind(biome, rng);
       cache.push({ x, y, kind: i === 0 ? 'tire' : kind });
     }
@@ -112,7 +112,7 @@ export function makeField(seed) {
       const i = padCache.length;
       const propI = propAt(i);
       const propNext = propAt(i + 1);
-      const biome = biomeAt(propI.y / SCORING.pointsPerMetre);
+      const biome = biomeAtY(propI.y);
       const chanceDraw = padRng();
       const xDraw = padRng();
       const yDraw = padRng();
@@ -173,12 +173,15 @@ export function makeField(seed) {
  * @returns {'tire'|'gear'}
  */
 function pickKind(biome, rng) {
-  const keys = Object.keys(biome.kinds);
-  const total = keys.reduce((sum, k) => sum + biome.kinds[k], 0);
+  // Walk `biome.kinds` (an ordered array of [kind, weight] pairs — see biome.js
+  // for why it must not be a Record) in its own declared order. That order is
+  // part of the deterministic output for a seed, exactly like everything else
+  // in this file.
+  const total = biome.kinds.reduce((sum, [, w]) => sum + w, 0);
   let r = rng() * total;
-  for (const k of keys) {
-    r -= biome.kinds[k];
+  for (const [k, w] of biome.kinds) {
+    r -= w;
     if (r < 0) return /** @type {'tire'|'gear'} */ (k);
   }
-  return /** @type {'tire'|'gear'} */ (keys[keys.length - 1]);
+  return /** @type {'tire'|'gear'} */ (biome.kinds[biome.kinds.length - 1][0]);
 }

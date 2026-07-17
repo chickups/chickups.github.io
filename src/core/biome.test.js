@@ -31,10 +31,11 @@ test('kinds is attachable-only — every biome only names tire/gear, never pad',
   // which is the opposite of the design (doc §13: "no penalty, just lost
   // height"). See the slice-2 task-2b writeup for the reachability math.
   for (const b of BIOMES) {
-    for (const k of Object.keys(b.kinds)) {
+    assert.ok(Array.isArray(b.kinds), `${b.key}.kinds must be an ordered array, not a Record (Swift portability)`);
+    for (const [k] of b.kinds) {
       assert.ok(['tire', 'gear'].includes(k), `${b.key} names non-attachable kind ${k}`);
     }
-    assert.ok(Object.values(b.kinds).some((w) => w > 0), `${b.key} must allow some kind`);
+    assert.ok(b.kinds.some(([, w]) => w > 0), `${b.key} must allow some kind`);
   }
 });
 
