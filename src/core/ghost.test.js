@@ -94,6 +94,11 @@ test('isValidGhost rejects junk from storage', () => {
   assert.equal(isValidGhost({ seed: 1, taps: [3, 1], metres: 2 }), false, 'must be ascending');
   assert.equal(isValidGhost({ seed: 1, taps: [1.5], metres: 2 }), false, 'must be integers');
   assert.equal(isValidGhost({ seed: 1, taps: [-1], metres: 2 }), false, 'no negative frames');
+  assert.equal(
+    isValidGhost({ seed: 1, taps: [1, 2], metres: 2 }),
+    false,
+    'two rising edges can never land on adjacent frames — an edge at N requires pressed=false at N-1',
+  );
   assert.equal(isValidGhost({ seed: 1, taps: [1, 5], metres: 2 }), true);
   assert.equal(isValidGhost({ seed: 1, taps: [1, 5], metres: 2 }, 2), false, 'seed must match');
   assert.equal(isValidGhost({ seed: 1, taps: [1, 5], metres: 2 }, 1), true);

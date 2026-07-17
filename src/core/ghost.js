@@ -67,9 +67,12 @@ export function isValidGhost(g, expectSeed) {
   if (!Number.isFinite(g.seed) || !Number.isFinite(g.metres)) return false;
   if (!Array.isArray(g.taps)) return false;
   if (!g.taps.every((t) => Number.isInteger(t) && t >= 0)) return false;
-  // Ascending and never adjacent — the edge invariant above.
+  // Ascending and never adjacent — the edge invariant above. A rising edge at
+  // frame N requires `pressed` false at N-1, so two edges can never be only
+  // one frame apart; requiring a gap of at least 2 enforces ascending order
+  // (any gap >= 2 is > 0) and non-adjacency in the same check.
   for (let i = 1; i < g.taps.length; i++) {
-    if (g.taps[i] <= g.taps[i - 1]) return false;
+    if (g.taps[i] - g.taps[i - 1] < 2) return false;
   }
   if (expectSeed !== undefined && g.seed !== expectSeed) return false;
   return true;
