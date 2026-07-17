@@ -1,4 +1,5 @@
 // @ts-check
+import { getSetting } from './storage.js';
 
 /**
  * Doc §12's haptic vocabulary. `navigator.vibrate` is a no-op on iOS Safari
@@ -6,10 +7,18 @@
  * the native port — so the call sites are correct now even where the effect is not.
  *
  * All gameplay stays understandable without haptics.
+ *
+ * The Haptics setting is checked HERE rather than at each call site, so every
+ * export is gated by construction and a future haptic cannot forget to ask.
+ * Read fresh each time rather than cached: a buzz fires on an attach or a
+ * launch, never per frame, so a localStorage read costs nothing measurable —
+ * and a cache would need an invalidation seam that could silently go stale
+ * when the toggle flips.
  * @param {number|number[]} pattern
  */
 function buzz(pattern) {
   try {
+    if (!getSetting('haptics')) return;
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(pattern);
   } catch {
     // Never let feedback break a frame.

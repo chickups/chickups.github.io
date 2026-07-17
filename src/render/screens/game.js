@@ -13,14 +13,18 @@ import { makeZones, truckX } from '../../core/zones.js';
 import { biomeAtY, biomeIndexAtY } from '../../core/biome.js';
 import { createRun, step, scoreOf, radiusOf } from '../../core/run.js';
 import { PHYSICS, SCORING, COLORS, PROPS, HAZARD, ZONES } from '../../core/tokens.js';
+import { modifierForDay, applyModifier, baseTuning } from '../../core/modifier.js';
 import { makeInput } from '../../input.js';
 import {
   getBest, recordRun, getEquippedOutfit, setDailyBest,
-  getStats, getSeenAchievements, markAchievementsSeen,
+  getStats, getSeenAchievements, markAchievementsSeen, checkMilestones,
+  getStreak, setStreak, getSetting,
 } from '../../storage.js';
 import { pendingUnlocks } from '../../core/achievements.js';
 import { toastAchievement } from '../toast.js';
+import { queueReward } from './reward.js';
 import { dayNumber, dailySeed } from '../../core/daily.js';
+import { advanceStreak } from '../../core/streak.js';
 import { viewportPoints } from '../../viewport.js';
 import { tap, medium, rigid } from '../../haptics.js';
 
@@ -53,14 +57,30 @@ export function gameScreen(go, arg) {
   // pure function of its seed, so every player gets the same route with no
   // server involved. Only a leaderboard would need one.
   const daily = Boolean(arg && arg.daily);
-  const day = dayNumber(Date.now(), new Date().getTimezoneOffset());
+  // Prefer the day the Daily screen already computed and passed in. Reading the
+  // clock fresh here would let a dwell across local midnight play a different
+  // route/modifier than the one the screen advertised. A plain run has no
+  // arg.day and reads the clock (its `day` only feeds the daily-only branches).
+  const day =
+    daily && arg && Number.isFinite(arg.day)
+      ? arg.day
+      : dayNumber(Date.now(), new Date().getTimezoneOffset());
   const seed = daily ? dailySeed(day) : ((Date.now() >>> 0) || 1);
-  const field = makeField(seed);
-  const zones = makeZones(seed, field);
+  // The route comes from the seed; the RULES come from the modifier. Two separate
+  // jobs, deliberately: `dailySeed` identifies which route today is, and
+  // `modifierForDay` picks which of the seven modifiers is applied to it. A plain
+  // run gets `baseTuning()`, which is every token default — i.e. no change at all.
+  const tuning = daily ? applyModifier(modifierForDay(day)) : baseTuning();
+  const field = makeField(seed, tuning);
+  const zones = makeZones(seed, field, tuning);
   let state = createRun(field, vp.h);
 
   const best = getBest();
   const outfit = getEquippedOutfit();
+  // Read once per run, not per frame: flipping the toggle mid-run is not a case
+  // that exists — Settings is only reachable from Home and Pause, and Pause
+  // rebuilds the screen on resume.
+  const hints = getSetting('hints');
   /** The run's peak chain, for the achievement stats. `state.chain` resets on a
    *  drop, so the maximum has to be watched from outside the sim. */
   let maxChain = 0;
@@ -225,9 +245,13 @@ export function gameScreen(go, arg) {
     peepEl.style.transform =
       `translate(${px(state.x - PHYSICS.peepSize / 2)},${px(-state.y - PHYSICS.peepSize / 2)}) rotate(${rotation}deg)`;
 
+    // Tutorial Hints off means no bubble at all. `hud.update` already treats an
+    // empty string as "hide the bubble", so this needs no HUD change.
     let tip = '';
-    if (!state.everLaunched) tip = TIP_TAP;
-    else if (!state.everGrabbed) tip = TIP_LAND;
+    if (hints) {
+      if (!state.everLaunched) tip = TIP_TAP;
+      else if (!state.everGrabbed) tip = TIP_LAND;
+    }
 
     // biomeAtY, not biomeAt(scoreOf(state)): the field generator (field.js/zones.js)
     // always keys a prop's biome off ABSOLUTE world height. scoreOf is climbed
@@ -275,7 +299,7 @@ export function gameScreen(go, arg) {
       // Polled once per TICK, not once per frame: isPressed() consumes the press
       // latch, so a tap that came and went between frames still lands on exactly
       // one tick.
-      state = step(state, field, FIXED_DT, input.isPressed(), h, zones);
+      state = step(state, field, FIXED_DT, input.isPressed(), h, zones, tuning);
       if (state.chain > maxChain) maxChain = state.chain;
 
       if (state.phase === 'fly' && prevPhase === 'orbit') medium();
@@ -303,7 +327,14 @@ export function gameScreen(go, arg) {
         // live HUD actually showed, not a start-relative reading of it.
         biomeIndex: biomeIndexAtY(state.maxY),
       });
-      if (daily) setDailyBest(day, metres);
+      if (daily) {
+        setDailyBest(day, metres);
+        // The streak advances on a FINISHED daily run, not on opening the Daily
+        // screen — the ladder pays for playing, not for looking. `advanceStreak`
+        // is idempotent for the same day, so a second run today is free of charge
+        // and costs nothing to call unconditionally here.
+        setStreak(advanceStreak(getStreak(), day));
+      }
 
       // Read stats back only AFTER recordRun has written them — an achievement is a
       // fact about the new totals, so asking any earlier tests the previous run.
@@ -315,6 +346,13 @@ export function gameScreen(go, arg) {
         markAchievementsSeen(unlocked.map((a) => a.key));
         for (const a of unlocked) toastAchievement(a.name);
       }
+
+      // A milestone is the same kind of fact, about the same new totals, and marks
+      // itself seen at grant time for the same reason (see checkMilestones). It only
+      // QUEUES here: §05 sequences the score first, so the reward interstitials when
+      // the player leaves the terminal screen, never on top of it.
+      const rungs = checkMilestones(getStats());
+      if (rungs.length > 0) queueReward(rungs[rungs.length - 1].grant);
 
       const isBest = metres > best;
       go(isBest ? 'best' : 'oops', {

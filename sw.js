@@ -2,7 +2,7 @@
 /* Service worker. Cache-first: the game is fully static, so once installed it
    works offline permanently. Bump CACHE on every deploy to invalidate. */
 
-const CACHE = 'chickup-v7';
+const CACHE = 'chickup-v8';
 
 /** Everything needed to run with no network at all. */
 const PRECACHE = [
@@ -25,6 +25,10 @@ const PRECACHE = [
   './src/core/ghost.js',
   './src/core/shop.js',
   './src/core/achievements.js',
+  './src/core/milestone.js',
+  './src/core/streak.js',
+  './src/core/modifier.js',
+  './src/core/settings.js',
   './src/render/el.js',
   './src/render/styles.js',
   './src/render/ui.js',
@@ -52,6 +56,8 @@ const PRECACHE = [
   './src/render/screens/shop.js',
   './src/render/screens/achievements.js',
   './src/render/screens/settings.js',
+  './src/render/screens/reward.js',
+  './src/render/screens/daily.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable-512.png',

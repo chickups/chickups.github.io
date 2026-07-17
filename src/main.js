@@ -1,8 +1,8 @@
 // @ts-check
 import { installViewport } from './viewport.js';
-import { installStyles } from './render/styles.js';
+import { installStyles, setReducedMotion } from './render/styles.js';
 import { installToasts } from './render/toast.js';
-import { initAchievementNotices } from './storage.js';
+import { initAchievementNotices, initMilestoneNotices, getSetting } from './storage.js';
 import { registerScreens, go } from './render/screens/router.js';
 import { splashScreen } from './render/screens/splash.js';
 import { introScreen } from './render/screens/intro.js';
@@ -12,9 +12,11 @@ import { gameScreen } from './render/screens/game.js';
 import { pauseScreen } from './render/screens/pause.js';
 import { oopsScreen } from './render/screens/oops.js';
 import { bestScreen } from './render/screens/best.js';
+import { rewardScreen } from './render/screens/reward.js';
 import { shopScreen } from './render/screens/shop.js';
 import { achievementsScreen } from './render/screens/achievements.js';
 import { settingsScreen } from './render/screens/settings.js';
+import { dailyScreen } from './render/screens/daily.js';
 
 // No browser context menu anywhere: a right-click on desktop or a long-press on
 // touch would otherwise raise it mid-run, over a game whose only verb is a tap.
@@ -24,10 +26,14 @@ window.addEventListener('contextmenu', (e) => e.preventDefault());
 const stage = /** @type {HTMLElement} */ (document.getElementById('stage'));
 installViewport(stage);
 installStyles();
+// Before the first screen mounts, or the splash plays its animations once at
+// full motion for a player who asked for none.
+setReducedMotion(getSetting('motion'));
 installToasts(stage);
-// Must run before the first run can end: it decides what this player has already
+// Must run before the first run can end: they decide what this player has already
 // been told, and only an untouched install may be told everything.
 initAchievementNotices();
+initMilestoneNotices();
 
 registerScreens(stage, {
   splash: splashScreen,
@@ -38,9 +44,11 @@ registerScreens(stage, {
   pause: pauseScreen,
   oops: oopsScreen,
   best: bestScreen,
+  reward: rewardScreen,
   shop: shopScreen,
   achievements: achievementsScreen,
   settings: settingsScreen,
+  daily: dailyScreen,
 });
 
 go('splash');

@@ -1,6 +1,8 @@
 // @ts-check
 import { DEFAULT_OUTFIT, outfitAt } from './core/shop.js';
 import { ACHIEVEMENTS, evaluate } from './core/achievements.js';
+import { MILESTONES, passedMilestones, pendingMilestones, grantFor } from './core/milestone.js';
+import { settingAt } from './core/settings.js';
 
 const K = {
   best: 'chickup.best',
@@ -21,6 +23,19 @@ const K = {
   // Achievement keys the player has already been shown a toast for. Absence is
   // meaningful and distinct from `[]` — see `initAchievementNotices`.
   achSeen: 'chickup.achSeen',
+  // Milestone rung INDICES the player has already been shown a reward for. Absence is
+  // meaningful and distinct from `[]` — see `initMilestoneNotices`.
+  msSeen: 'chickup.msSeen',
+  // The streak's last-played day and its length. `advanceStreak` in core/streak.js
+  // owns every transition; this is only where it is parked between launches.
+  streak: 'chickup.streak',
+  // The day number whose streak reward has already been taken. A rung pays ONCE:
+  // without this, closing and reopening the Daily screen would re-collect it.
+  // Mirrors the dailyBest pair — a day number in, a day number out.
+  streakClaimed: 'chickup.streakClaimed',
+  // Player settings, as a sparse record of overrides. Untrusted like every other
+  // key: an older build, a hand-edited value, or plain junk can be in here.
+  settings: 'chickup.settings',
 };
 
 /**
@@ -78,6 +93,26 @@ function readStringArray(key) {
  */
 function writeStringArray(key, value) {
   write(key, JSON.stringify(value));
+}
+
+/**
+ * Read a number list stored as JSON. Same contract as {@link readStringArray}: anything
+ * that is not a JSON array of finite numbers is treated as absent. Callers that need to
+ * distinguish absent from `[]` must use `readString` on the raw key — both parse to an
+ * empty list here, and that difference is load-bearing (see `initMilestoneNotices`).
+ * @param {string} key
+ * @returns {number[]}
+ */
+function readNumberArray(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw === null) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((v) => typeof v === 'number' && Number.isFinite(v));
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -247,6 +282,89 @@ export function initAchievementNotices() {
 }
 
 /**
+ * Milestone rung indices already announced to the player. Filtered to indices that exist
+ * in the real ladder, exactly as `getSeenAchievements` filters against the real table: a
+ * stale index left by a build with a longer ladder must not count as "announced" for a
+ * rung that no longer exists, and junk must not silence a rung that does.
+ * @returns {number[]}
+ */
+export function getSeenMilestones() {
+  return readNumberArray(K.msSeen).filter(
+    (i) => Number.isInteger(i) && i >= 0 && i < MILESTONES.length,
+  );
+}
+
+/**
+ * Mark milestone rungs as announced. Idempotent — re-marking is a no-op.
+ * @param {number[]} indices
+ */
+export function markMilestonesSeen(indices) {
+  const seen = getSeenMilestones();
+  const add = indices.filter((i) => !seen.includes(i));
+  if (add.length === 0) return;
+  write(K.msSeen, JSON.stringify([...seen, ...add]));
+}
+
+/**
+ * Decide which rungs an existing player has "already been told about", once, on first run
+ * of any build that has milestones.
+ *
+ * This is the achievement parade, again, exactly. Milestones are derived from lifetime
+ * feathers, so a player with thousands of them has passed every rung the instant this
+ * code ships. Without this, their next run would fire three reward screens back to back
+ * for work done weeks ago. Backfilling everything currently passed makes the feature
+ * start from "you are up to date" and only ever announce genuinely new work.
+ *
+ * A fresh install backfills `[]` (no feathers, nothing passed), so new players still get
+ * every reward. The absent-vs-empty distinction is the whole mechanism: `[]` means
+ * "backfilled, nothing was passed", absent means "never backfilled". That is why the
+ * guard reads the RAW string — `getSeenMilestones()` would parse both to `[]` and
+ * re-backfill on every launch, swallowing the very rewards it exists to protect.
+ */
+export function initMilestoneNotices() {
+  if (readString(K.msSeen) !== null) return;
+  write(K.msSeen, JSON.stringify(passedMilestones(getStats().totalFeathers)));
+}
+
+/**
+ * Grant every rung the player has passed but not been shown, ascending.
+ *
+ * This is the stateful half of `core/milestone.js` — it lives here, not in `core/`,
+ * because granting writes (owned outfits, feathers, seen rungs) and `core/` is pure.
+ *
+ * `stats` is passed in rather than read here so the caller controls the ordering rule:
+ * a milestone is a fact about the NEW totals, so `recordRun` must have written them
+ * first (see game.js).
+ *
+ * A rung is marked seen at GRANT time, not when its screen finishes: if the player
+ * leaves mid-animation the grant must still stand. The screen is a courtesy; the record
+ * of having earned it is not. Marking before granting also makes a mid-loop throw fail
+ * closed — a rung is never granted twice.
+ *
+ * `grantFor` is re-asked per rung against freshly-read ownership, so crossing two rungs
+ * at once grants two DIFFERENT outfits rather than the same one twice.
+ *
+ * The all-owned bonus goes through `addFeathers` (spendable only) and deliberately does
+ * not touch `statTotalFeathers` — if it did, a bonus could push the player over the next
+ * rung, which would grant another bonus, and so on.
+ *
+ * @param {import('./core/achievements.js').Stats} stats
+ * @returns {{index:number, grant:import('./core/milestone.js').Grant}[]} ascending
+ */
+export function checkMilestones(stats) {
+  /** @type {{index:number, grant:import('./core/milestone.js').Grant}[]} */
+  const out = [];
+  for (const index of pendingMilestones(stats.totalFeathers, getSeenMilestones())) {
+    const grant = grantFor(getOwnedOutfits());
+    markMilestonesSeen([index]);
+    if (grant.kind === 'outfit') addOwnedOutfit(grant.outfitKey);
+    else addFeathers(grant.amount);
+    out.push({ index, grant });
+  }
+  return out;
+}
+
+/**
  * Read the daily-best map, tolerating anything localStorage might hold: an older
  * build's shape, hand-edited JSON, or plain junk.
  * @returns {Record<string, number>}
@@ -292,4 +410,99 @@ export function setDailyBest(day, metres) {
     .filter((d) => day - d < 7)
     .reduce((acc, d) => { acc[String(d)] = map[String(d)]; return acc; }, /** @type {Record<string, number>} */ ({}));
   write(K.dailyBest, JSON.stringify(kept));
+}
+
+/**
+ * The stored streak, or `null` if there has never been one.
+ *
+ * Validated the way `getSeenAchievements` validates its list: localStorage is
+ * untrusted, and an older build, hand-edited JSON, or plain junk must fall back
+ * cleanly rather than throw. Anything that is not `{day:number, length:number}`
+ * with two finite numbers reads as "no streak", which `advanceStreak` then
+ * treats as a first-ever play.
+ *
+ * @returns {import('./core/streak.js').StreakState|null}
+ */
+export function getStreak() {
+  try {
+    const raw = localStorage.getItem(K.streak);
+    if (!raw) return null;
+    const v = JSON.parse(raw);
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+    if (!Number.isFinite(v.day) || !Number.isFinite(v.length)) return null;
+    return { day: Number(v.day), length: Number(v.length) };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Park a streak. Takes whatever `advanceStreak` returned — no rules live here.
+ * @param {import('./core/streak.js').StreakState} state
+ */
+export function setStreak(state) {
+  write(K.streak, JSON.stringify({ day: Math.floor(state.day), length: Math.floor(state.length) }));
+}
+
+/**
+ * The day whose streak reward has already been collected, or -1 if none ever has.
+ * -1 rather than 0: day 0 is a real day (1 January 1970), so 0 cannot mean "never".
+ * @returns {number}
+ */
+export function getStreakClaimed() {
+  return readNumber(K.streakClaimed, -1);
+}
+
+/**
+ * Record that today's rung has been paid out.
+ * @param {number} day from `dayNumber()` in core/daily.js
+ */
+export function setStreakClaimed(day) {
+  write(K.streakClaimed, String(Math.floor(day)));
+}
+
+/**
+ * Read the settings record, tolerating anything localStorage might hold. Mirrors
+ * `readStringArray`'s discipline (`storage.js:63`): a string, `null`, an array,
+ * an object of non-booleans — all fall back cleanly rather than throw.
+ * @returns {Record<string, boolean>}
+ */
+function readSettings() {
+  try {
+    const raw = localStorage.getItem(K.settings);
+    if (!raw) return {};
+    const v = JSON.parse(raw);
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
+    /** @type {Record<string, boolean>} */
+    const out = {};
+    // Filtered against the real table AND to booleans: a renamed or removed
+    // setting left by an older build must not resurrect as a live override.
+    for (const [k, on] of Object.entries(v)) {
+      if (typeof on === 'boolean' && settingAt(k)) out[k] = on;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Is a setting on? Unknown keys are `false` — a caller asking about a setting
+ * that does not exist must never accidentally enable anything.
+ * @param {string} key a `SETTINGS[].key`
+ * @returns {boolean}
+ */
+export function getSetting(key) {
+  const stored = readSettings()[key];
+  if (typeof stored === 'boolean') return stored;
+  return settingAt(key)?.def ?? false;
+}
+
+/**
+ * @param {string} key a `SETTINGS[].key`; unknown keys are ignored
+ * @param {boolean} on
+ */
+export function setSetting(key, on) {
+  if (!settingAt(key)) return;
+  write(K.settings, JSON.stringify({ ...readSettings(), [key]: Boolean(on) }));
 }

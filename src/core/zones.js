@@ -2,6 +2,7 @@
 import { makeRng } from './rng.js';
 import { ZONES, HAZARD, DESIGN } from './tokens.js';
 import { biomeAtY } from './biome.js';
+import { baseTuning } from './modifier.js';
 
 /** @typedef {import('./field.js').Field} Field */
 /** @typedef {{x:number, y:number, w:number, h:number}} Updraft */
@@ -42,9 +43,14 @@ import { biomeAtY } from './biome.js';
  *
  * @param {number} seed
  * @param {Field} field the SAME field the run is using, for truck safety checks
+ * @param {import('./modifier.js').RunTuning} [tuning] Daily Run modifiers. Two knobs
+ *   reach here: `trucksEverywhere` (Rush Hour) overrides the biome's own `trucks` flag,
+ *   and `updraftScale` (Tailwind) packs updrafts closer together. Both change the VALUES
+ *   a slot computes, never the NUMBER OF DRAWS it consumes, so a modified stream stays
+ *   as deterministic and as decorrelated as an unmodified one. Omitted, it is a plain run.
  * @returns {Zones}
  */
-export function makeZones(seed, field) {
+export function makeZones(seed, field, tuning = baseTuning()) {
   // Different constants from field.js's pad stream (0x85ebca6b) and from each
   // other, so none of these four streams (spine, pads, updrafts, trucks) can
   // ever become correlated.
@@ -90,7 +96,10 @@ export function makeZones(seed, field) {
       // Two draws, always, in this order: spacing jitter, then x position.
       const spacingDraw = updraftRng();
       const xDraw = updraftRng();
-      const y = prevY + ZONES.updraftEvery * (0.75 + 0.5 * spacingDraw);
+      // Tailwind ("stronger and more frequent") divides the spacing: scale 1.25
+      // puts a draft every 416pt instead of every 520. Still exactly two draws per
+      // index, in the same order — only the arithmetic on them changed.
+      const y = prevY + (ZONES.updraftEvery / tuning.updraftScale) * (0.75 + 0.5 * spacingDraw);
       updraftY.push(y);
       const biome = biomeAtY(y);
       let zone = null;
@@ -147,12 +156,15 @@ export function makeZones(seed, field) {
       truckY.push(y);
       const biome = biomeAtY(y);
       let truck = null;
-      if (biome.trucks) {
+      // Rush Hour ignores the biome table and puts traffic everywhere. The safety
+      // search below (`findSafeTruckY`) still runs unchanged, so a truck spawned in
+      // a biome that normally has none is still barred from sitting on an orbit ring.
+      if (tuning.trucksEverywhere || biome.trucks) {
         const safeY = findSafeTruckY(y, nudgeDraw, field);
         // Landing outside the truck-biome band after a nudge is possible only
         // right at a biome boundary; re-check rather than assume the nudge
         // stayed inside the same biome that admitted the candidate.
-        if (safeY !== null && biomeAtY(safeY).trucks) {
+        if (safeY !== null && (tuning.trucksEverywhere || biomeAtY(safeY).trucks)) {
           const dir = /** @type {1|-1} */ (dirDraw < 0.5 ? -1 : 1);
           // Starting offset within the wrap span (see truckX), so trucks born
           // at different indices are not phase-locked to each other.

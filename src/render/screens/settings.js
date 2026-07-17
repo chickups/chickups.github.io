@@ -1,9 +1,11 @@
 // @ts-check
 import { el, px } from '../el.js';
 import { peep } from '../art/peep.js';
-import { primaryButton, secondaryButton, card } from '../ui.js';
+import { primaryButton, secondaryButton, toggleRow } from '../ui.js';
 import { COLORS } from '../../core/tokens.js';
-import { getEquippedOutfit } from '../../storage.js';
+import { SETTINGS } from '../../core/settings.js';
+import { getEquippedOutfit, getSetting, setSetting } from '../../storage.js';
+import { setReducedMotion } from '../styles.js';
 
 /** Cache name prefix owned by this app; see sw.js. */
 const CACHE_PREFIX = 'chickup-';
@@ -18,6 +20,10 @@ const CACHE_PREFIX = 'chickup-';
  * come back from the network.
  *
  * Only caches this app owns are deleted — the origin may host other things.
+ *
+ * NOTE: this card appears NOWHERE in the design doc. It is kept deliberately as
+ * a PWA escape hatch; it is an addition, not a design requirement. Do not go
+ * looking for it in §07.
  *
  * @returns {Promise<void>}
  */
@@ -44,11 +50,34 @@ async function reloadApp() {
 }
 
 /**
+ * Everything a toggle does the instant it flips, beyond being stored.
+ *
+ * `haptics` and `hints` are absent on purpose and that is not an oversight:
+ * `haptics.js` asks `getSetting('haptics')` inside `buzz` on every call, and
+ * `game.js` reads `getSetting('hints')` when a run starts — both read the store
+ * directly, so storing the value IS the effect. `contrast` is absent until
+ * Task 15 (spec Component 8) lands; if that task is dropped, its row must come
+ * out of `core/settings.js` — D8 forbids a switch that does nothing.
+ *
+ * @type {Record<string, (on: boolean) => void>}
+ */
+const EFFECTS = {
+  motion: (on) => setReducedMotion(on),
+};
+
+/**
  * @param {(name: string, arg?: any) => void} go
  * @returns {HTMLElement}
  */
 export function settingsScreen(go) {
   const outfit = getEquippedOutfit();
+
+  // Same pattern as shop.js's `outfitRow`: toggleRow renders its ON/OFF text and
+  // knob position from the `isOn` it was built with once, and does not update
+  // itself on tap. Without rebuilding the whole screen after every flip, the row
+  // would keep showing the OLD state — storage and behaviour would be correct,
+  // but the switch would look broken, which is its own flavour of dead switch.
+  const refresh = () => go('settings');
 
   const status = el('div', {
     font: `700 ${px(13)} 'Nunito'`, color: COLORS.muted,
@@ -59,6 +88,36 @@ export function settingsScreen(go) {
     status.textContent = 'Clearing…';
     reloadApp();
   }, { size: 22, lip: 6 });
+
+  /** @param {string} text */
+  const groupHeader = (text) => el('div', {
+    font: `800 ${px(12)} 'Nunito'`, color: COLORS.muted, letterSpacing: '.08em',
+    margin: `${px(18)} 0 ${px(8)} ${px(6)}`,
+  }, text);
+
+  /** Rendered from the table, so dropping a row drops its switch and nothing else. */
+  const groups = [...new Set(SETTINGS.map((s) => s.group))].map((group) =>
+    el(
+      'div',
+      {},
+      groupHeader(group),
+      el(
+        'div',
+        {
+          background: COLORS.cream, borderRadius: px(24),
+          padding: `${px(6)} ${px(16)}`, boxShadow: '0 6px 0 rgba(75,53,36,.12)',
+        },
+        ...SETTINGS.filter((s) => s.group === group).map((s) =>
+          toggleRow(s.label, getSetting(s.key), (next) => {
+            setSetting(s.key, next);
+            const effect = EFFECTS[s.key];
+            if (effect) effect(next);
+            refresh();
+          }),
+        ),
+      ),
+    ),
+  );
 
   return el(
     'div',
@@ -74,9 +133,12 @@ export function settingsScreen(go) {
         font: `800 ${px(30)} 'Baloo 2'`, color: COLORS.ink, textAlign: 'center',
       }, 'Settings'),
 
-      el('div', { display: 'flex', justifyContent: 'center', margin: `${px(6)} 0 ${px(14)}` },
-        peep(96, 'idle', outfit, false)),
+      el('div', { display: 'flex', justifyContent: 'center', margin: `${px(6)} 0 0` },
+        peep(72, 'idle', outfit, false)),
 
+      ...groups,
+
+      groupHeader('APP'),
       el(
         'div',
         {
@@ -92,9 +154,9 @@ export function settingsScreen(go) {
         status,
       ),
 
-      el('div', { flex: '1' }),
+      el('div', { flex: '1', minHeight: px(20) }),
       el('div', { display: 'flex', justifyContent: 'center' },
-        secondaryButton('Home', 'home', () => go('home'))),
+        secondaryButton('Close', 'close', () => go('home'))),
     ),
   );
 }

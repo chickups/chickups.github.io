@@ -1,6 +1,6 @@
 // @ts-check
 
-const CSS = `
+const KEYFRAMES = `
 @font-face {
   font-family: 'Baloo 2';
   font-style: normal;
@@ -95,22 +95,55 @@ const CSS = `
 /* Travels 78pt: it starts behind the ~62pt-tall card, so anything less plays the
    whole burst out of sight behind it. */
 @keyframes toastConf{0%{transform:translate(0,0) rotate(0);opacity:0}18%{opacity:1}100%{transform:translate(var(--dx,0),78px) rotate(240deg);opacity:0}}
+`;
 
-@media (prefers-reduced-motion: reduce) {
-  /* Doc §12: parallax, confetti and idle bounces fall back to fades.
-     Gameplay motion is NOT animation-driven — Peep and the field are moved by
-     transform in the rAF loop — so the game stays fully playable here. */
-  [style*="pConf"], [style*="pTwinkle"], [style*="gbCloud"],
-  [style*="peekBob"], [style*="puff"], [style*="truckBob"],
-  [style*="pFloat"], [style*="peepBob"], [style*="peepWingFlap"],
-  [style*="peepLegL"], [style*="peepLegR"], [style*="peepBlink"],
-  [style*="tireSpin"] {
+/**
+ * Doc §12: parallax, confetti and idle bounces fall back to fades.
+ * Gameplay motion is NOT animation-driven — Peep and the field are moved by
+ * transform in the rAF loop — so the game stays fully playable either way.
+ *
+ * Emitted TWICE from this one function, because the two triggers cannot share a
+ * selector: the OS preference is a media query (unforceable from JS), and the
+ * Settings toggle is an attribute on the root element. One source, so the two
+ * can never drift — the rules key off inline `animation` values, so a keyframe
+ * renamed in one copy and not the other would fail silently.
+ * @param {string} scope '' for the media query, or an ancestor selector
+ * @returns {string} CSS rules
+ */
+function motionOffRules(scope) {
+  const s = scope ? `${scope} ` : '';
+  return `
+  ${s}[style*="pConf"], ${s}[style*="pTwinkle"], ${s}[style*="gbCloud"],
+  ${s}[style*="peekBob"], ${s}[style*="puff"], ${s}[style*="truckBob"],
+  ${s}[style*="pFloat"], ${s}[style*="peepBob"], ${s}[style*="peepWingFlap"],
+  ${s}[style*="peepLegL"], ${s}[style*="peepLegR"], ${s}[style*="peepBlink"],
+  ${s}[style*="tireSpin"] {
     animation: none !important;
   }
-  [style*="pPop"] { animation: pFade .2s !important; }
-  * { transition-duration: .01ms !important; }
-}
+  ${s}[style*="pPop"] { animation: pFade .2s !important; }
+  ${s}* { transition-duration: .01ms !important; }
 `;
+}
+
+const CSS = `${KEYFRAMES}
+@media (prefers-reduced-motion: reduce) {
+${motionOffRules('')}
+}
+${motionOffRules('[data-motion="reduce"]')}
+`;
+
+/**
+ * Force the reduced-motion path on or off, independently of the OS preference.
+ * Stamped on the ROOT element: the router replaces the stage's child on every
+ * navigation, so an attribute on a screen node would not survive one — and
+ * toasts parent to `#stage`, outside whatever screen is mounted.
+ * @param {boolean} on
+ */
+export function setReducedMotion(on) {
+  const root = document.documentElement;
+  if (on) root.setAttribute('data-motion', 'reduce');
+  else root.removeAttribute('data-motion');
+}
 
 let installed = false;
 

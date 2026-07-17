@@ -7,7 +7,7 @@ import { logo } from '../art/logo.js';
 import { icon } from '../art/icon.js';
 import { primaryButton, pill, card, iconButton } from '../ui.js';
 import { COLORS } from '../../core/tokens.js';
-import { getFeathers, markIntroSeen, getEquippedOutfit, getDailyBest } from '../../storage.js';
+import { getFeathers, markIntroSeen, getEquippedOutfit, getDailyBest, getStreak } from '../../storage.js';
 import { dayNumber } from '../../core/daily.js';
 
 /**
@@ -19,6 +19,28 @@ function todaysRouteLabel() {
   const day = dayNumber(Date.now(), new Date().getTimezoneOffset());
   const best = getDailyBest(day);
   return best > 0 ? `Today's best ${best} m` : "Today's route";
+}
+
+/**
+ * The flame pill's number: the streak the player currently holds.
+ *
+ * Was hardcoded `'0'` — a literal, permanently. Like `todaysRouteLabel` above,
+ * the clock is read here in `render/`; `core/streak.js` only ever takes a day
+ * number that someone else looked up.
+ *
+ * A streak whose last day is older than yesterday is already dead — `advanceStreak`
+ * would reset it to 1 on the next play — so it reads as 0 rather than showing a
+ * number the next run will not honour.
+ * @returns {string}
+ */
+function streakLabel() {
+  const today = dayNumber(Date.now(), new Date().getTimezoneOffset());
+  const streak = getStreak();
+  if (!streak) return '0';
+  // today - streak.day is 0 (played today) or 1 (played yesterday, still alive).
+  // Negative means the clock moved backwards; the streak is still the player's.
+  if (today - streak.day > 1) return '0';
+  return String(streak.length);
 }
 
 /**
@@ -52,7 +74,7 @@ export function homeScreen(go) {
       },
       el('div', { display: 'flex', gap: px(8) },
         pill('feather', String(getFeathers()), COLORS.yellowD),
-        pill('flame', '0', COLORS.orangeD),
+        pill('flame', streakLabel(), COLORS.orangeD),
       ),
       el(
         'div',
@@ -95,7 +117,11 @@ export function homeScreen(go) {
         // The daily route needs no server: the field is a pure function of its
         // seed, so seeding from the date gives everyone the same route without
         // anyone distributing it. Only a leaderboard would need a backend.
-        card('Daily Run', todaysRouteLabel(), { onTap: () => go('game', { daily: true }) }),
+        //
+        // The card opens the Daily screen; the Daily screen starts the run. It has
+        // the day's modifier and the streak ladder to show first — jumping straight
+        // into `game` was the placeholder while that screen did not exist.
+        card('Daily Run', todaysRouteLabel(), { onTap: () => go('daily') }),
         card('Race a Ghost', 'Beat your best', { disabled: true, badge: 'SOON' }),
       ),
     ),
