@@ -2,7 +2,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MODIFIERS, modifierForDay, baseTuning, applyModifier } from './modifier.js';
-import { PHYSICS, FIELD, PROPS, ZONES, ESCAPE, MODIFIER } from './tokens.js';
+import { PHYSICS, FIELD, ESCAPE, MODIFIER } from './tokens.js';
+import { makeField } from './field.js';
+import { makeZones } from './zones.js';
+import { createRun, step } from './run.js';
 
 test('there are exactly seven modifiers, one per weekday', () => {
   assert.equal(MODIFIERS.length, 7);
@@ -182,5 +185,53 @@ test('Low Ceiling drops the truck to 1100m, NOT 1000m', () => {
 test('a tuning is frozen — one run cannot leak its modifier into the next', () => {
   for (const mod of [null, ...MODIFIERS]) {
     assert.ok(Object.isFrozen(applyModifier(mod)), `${mod ? mod.key : 'base'} is mutable`);
+  }
+});
+
+test('field.js reads tuning.gapMax, not FIELD.gapMax', () => {
+  const thinAir = applyModifier(MODIFIERS.find((m) => m.key === 'thinAir') || null);
+  const plain = makeField(4242);
+  const thin = makeField(4242, thinAir);
+
+  // The spine's gap caps at gapMax once growth has ramped. Walk far enough up
+  // that both fields are pinned to their own ceiling, then measure.
+  const gapAt = (f, i) => f.propAt(i + 1).y - f.propAt(i).y;
+  assert.ok(Math.abs(gapAt(plain, 60) - 200) < 1e-9, `plain gap ${gapAt(plain, 60)}, want 200`);
+  assert.ok(Math.abs(gapAt(thin, 60) - 230) < 1e-9, `thin gap ${gapAt(thin, 60)}, want 230`);
+});
+
+test('an omitted tuning leaves field.js exactly as it was', () => {
+  // Every existing call site passes no tuning. They must generate the same field.
+  const a = makeField(777);
+  const b = makeField(777, baseTuning());
+  for (let i = 0; i < 40; i++) {
+    assert.deepEqual(a.propAt(i), b.propAt(i), `prop ${i} drifted`);
+    assert.deepEqual(a.padAt(i), b.padAt(i), `pad ${i} drifted`);
+  }
+});
+
+test('gearWeightBoost changes how OFTEN a gear spawns, never its speed', () => {
+  const slick = applyModifier(MODIFIERS.find((m) => m.key === 'slickGears') || null);
+  const countGears = (f) => {
+    let n = 0;
+    // Walk well into factory/highway/escape, the biomes whose `kinds` name a gear.
+    for (let i = 30; i < 400; i++) if (f.propAt(i).kind === 'gear') n++;
+    return n;
+  };
+  const plain = countGears(makeField(4242));
+  const boosted = countGears(makeField(4242, slick));
+  assert.ok(boosted > plain, `slick gears must spawn more gears: ${boosted} vs ${plain}`);
+});
+
+test('gearWeightBoost does not change the PRNG DRAW COUNT', () => {
+  // pickKind must consume exactly one draw whatever the weights are. If a boost
+  // changed the draw count, every later prop's x would shift too — the field would
+  // not merely be gearier, it would be a different field.
+  const slick = applyModifier(MODIFIERS.find((m) => m.key === 'slickGears') || null);
+  const plain = makeField(4242);
+  const boosted = makeField(4242, slick);
+  for (let i = 0; i < 200; i++) {
+    assert.equal(boosted.propAt(i).y, plain.propAt(i).y, `prop ${i} y moved`);
+    assert.equal(boosted.propAt(i).x, plain.propAt(i).x, `prop ${i} x moved — draw count changed`);
   }
 });

@@ -2,6 +2,7 @@
 import { makeRng } from './rng.js';
 import { FIELD, PROPS } from './tokens.js';
 import { biomeAtY } from './biome.js';
+import { baseTuning } from './modifier.js';
 
 /** @typedef {{x:number, y:number}} Wheel */
 /** @typedef {{x:number, y:number, kind:'tire'|'gear'}} Prop */
@@ -34,9 +35,13 @@ import { biomeAtY } from './biome.js';
  * slice-1 call sites; they return the very same objects.
  *
  * @param {number} seed
+ * @param {import('./modifier.js').RunTuning} [tuning] Daily Run modifiers. The spine
+ *   reads `tuning.gapMax` and `tuning.gearWeightBoost` INSTEAD of `FIELD.gapMax` and a
+ *   biome's raw gear weight — those are the only two knobs a modifier moves here.
+ *   Omitted, it is a plain unmodified run.
  * @returns {Field}
  */
-export function makeField(seed) {
+export function makeField(seed, tuning = baseTuning()) {
   const rng = makeRng(seed);
   /** @type {Prop[]} */
   const cache = [];
@@ -62,7 +67,10 @@ export function makeField(seed) {
       let y = 0;
       if (i > 0) {
         const prev = cache[i - 1];
-        const gap = Math.min(FIELD.gapMax, FIELD.gapStart + FIELD.gapGrowth * prev.y);
+        // tuning.gapMax, not FIELD.gapMax: Thin Air widens the ceiling 200 -> 230.
+        // The test in modifier.test.js guarantees no modifier can push this past
+        // what a launch can actually climb.
+        const gap = Math.min(tuning.gapMax, FIELD.gapStart + FIELD.gapGrowth * prev.y);
         y = prev.y + gap;
       }
       const col = FIELD.columns[i % FIELD.columns.length];
@@ -71,7 +79,7 @@ export function makeField(seed) {
       // make the PRNG sequence depend on the biome table.
       const x = col + (rng() * 2 - 1) * FIELD.jitter;
       const biome = biomeAtY(y);
-      const kind = pickKind(biome, rng);
+      const kind = pickKind(biome, rng, tuning.gearWeightBoost);
       cache.push({ x, y, kind: i === 0 ? 'tire' : kind });
     }
     return cache[index];
@@ -170,18 +178,25 @@ export function makeField(seed) {
  *
  * @param {import('./biome.js').Biome} biome
  * @param {() => number} rng
+ * @param {number} gearWeightBoost multiplies the `gear` weight (Slick Gears). 1 = untouched.
+ *   Re-weighting changes WHICH kind a given draw selects; it never changes how MANY
+ *   draws happen, so a boosted field has the same props in the same places, just more
+ *   of them gears. Spec D2: this is how often a gear spawns, NEVER how fast it spins.
  * @returns {'tire'|'gear'}
  */
-function pickKind(biome, rng) {
+function pickKind(biome, rng, gearWeightBoost = 1) {
   // Walk `biome.kinds` (an ordered array of [kind, weight] pairs — see biome.js
   // for why it must not be a Record) in its own declared order. That order is
   // part of the deterministic output for a seed, exactly like everything else
-  // in this file.
-  const total = biome.kinds.reduce((sum, [, w]) => sum + w, 0);
+  // in this file. `.map` preserves it.
+  const weights = biome.kinds.map(
+    ([k, w]) => /** @type {readonly [string, number]} */ ([k, k === 'gear' ? w * gearWeightBoost : w]),
+  );
+  const total = weights.reduce((sum, [, w]) => sum + w, 0);
   let r = rng() * total;
-  for (const [k, w] of biome.kinds) {
+  for (const [k, w] of weights) {
     r -= w;
     if (r < 0) return /** @type {'tire'|'gear'} */ (k);
   }
-  return /** @type {'tire'|'gear'} */ (biome.kinds[biome.kinds.length - 1][0]);
+  return /** @type {'tire'|'gear'} */ (weights[weights.length - 1][0]);
 }
