@@ -2,6 +2,7 @@
 import { DEFAULT_OUTFIT, outfitAt } from './core/shop.js';
 import { ACHIEVEMENTS, evaluate } from './core/achievements.js';
 import { MILESTONES, passedMilestones, pendingMilestones, grantFor } from './core/milestone.js';
+import { settingAt } from './core/settings.js';
 
 const K = {
   best: 'chickup.best',
@@ -32,6 +33,9 @@ const K = {
   // without this, closing and reopening the Daily screen would re-collect it.
   // Mirrors the dailyBest pair — a day number in, a day number out.
   streakClaimed: 'chickup.streakClaimed',
+  // Player settings, as a sparse record of overrides. Untrusted like every other
+  // key: an older build, a hand-edited value, or plain junk can be in here.
+  settings: 'chickup.settings',
 };
 
 /**
@@ -455,4 +459,50 @@ export function getStreakClaimed() {
  */
 export function setStreakClaimed(day) {
   write(K.streakClaimed, String(Math.floor(day)));
+}
+
+/**
+ * Read the settings record, tolerating anything localStorage might hold. Mirrors
+ * `readStringArray`'s discipline (`storage.js:63`): a string, `null`, an array,
+ * an object of non-booleans — all fall back cleanly rather than throw.
+ * @returns {Record<string, boolean>}
+ */
+function readSettings() {
+  try {
+    const raw = localStorage.getItem(K.settings);
+    if (!raw) return {};
+    const v = JSON.parse(raw);
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
+    /** @type {Record<string, boolean>} */
+    const out = {};
+    // Filtered against the real table AND to booleans: a renamed or removed
+    // setting left by an older build must not resurrect as a live override.
+    for (const [k, on] of Object.entries(v)) {
+      if (typeof on === 'boolean' && settingAt(k)) out[k] = on;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Is a setting on? Unknown keys are `false` — a caller asking about a setting
+ * that does not exist must never accidentally enable anything.
+ * @param {string} key a `SETTINGS[].key`
+ * @returns {boolean}
+ */
+export function getSetting(key) {
+  const stored = readSettings()[key];
+  if (typeof stored === 'boolean') return stored;
+  return settingAt(key)?.def ?? false;
+}
+
+/**
+ * @param {string} key a `SETTINGS[].key`; unknown keys are ignored
+ * @param {boolean} on
+ */
+export function setSetting(key, on) {
+  if (!settingAt(key)) return;
+  write(K.settings, JSON.stringify({ ...readSettings(), [key]: Boolean(on) }));
 }

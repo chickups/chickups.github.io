@@ -18,7 +18,7 @@ import { makeInput } from '../../input.js';
 import {
   getBest, recordRun, getEquippedOutfit, setDailyBest,
   getStats, getSeenAchievements, markAchievementsSeen, checkMilestones,
-  getStreak, setStreak,
+  getStreak, setStreak, getSetting,
 } from '../../storage.js';
 import { pendingUnlocks } from '../../core/achievements.js';
 import { toastAchievement } from '../toast.js';
@@ -77,6 +77,10 @@ export function gameScreen(go, arg) {
 
   const best = getBest();
   const outfit = getEquippedOutfit();
+  // Read once per run, not per frame: flipping the toggle mid-run is not a case
+  // that exists — Settings is only reachable from Home and Pause, and Pause
+  // rebuilds the screen on resume.
+  const hints = getSetting('hints');
   /** The run's peak chain, for the achievement stats. `state.chain` resets on a
    *  drop, so the maximum has to be watched from outside the sim. */
   let maxChain = 0;
@@ -241,9 +245,13 @@ export function gameScreen(go, arg) {
     peepEl.style.transform =
       `translate(${px(state.x - PHYSICS.peepSize / 2)},${px(-state.y - PHYSICS.peepSize / 2)}) rotate(${rotation}deg)`;
 
+    // Tutorial Hints off means no bubble at all. `hud.update` already treats an
+    // empty string as "hide the bubble", so this needs no HUD change.
     let tip = '';
-    if (!state.everLaunched) tip = TIP_TAP;
-    else if (!state.everGrabbed) tip = TIP_LAND;
+    if (hints) {
+      if (!state.everLaunched) tip = TIP_TAP;
+      else if (!state.everGrabbed) tip = TIP_LAND;
+    }
 
     // biomeAtY, not biomeAt(scoreOf(state)): the field generator (field.js/zones.js)
     // always keys a prop's biome off ABSOLUTE world height. scoreOf is climbed

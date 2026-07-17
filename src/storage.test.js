@@ -48,6 +48,8 @@ import {
   setStreak,
   getStreakClaimed,
   setStreakClaimed,
+  getSetting,
+  setSetting,
 } from './storage.js';
 
 /** Reset the stub between tests so each test starts from a clean, empty store. */
@@ -211,4 +213,78 @@ test('getStreakClaimed() falls back to -1 on corrupt storage rather than NaN or 
   resetStorage();
   fakeStorage.setItem('chickup.streakClaimed', 'not a number');
   assert.equal(getStreakClaimed(), -1);
+});
+
+test('getSetting() returns the table default when nothing has ever been stored', () => {
+  // Kills a mutation that hardcodes a wrong default, or one that ignores the
+  // table and returns `false`/`true` unconditionally for every key.
+  resetStorage();
+  assert.equal(getSetting('haptics'), true);
+  assert.equal(getSetting('hints'), true);
+  assert.equal(getSetting('motion'), false);
+  assert.equal(getSetting('contrast'), false);
+});
+
+test('getSetting() returns false, not the table default, for a key that does not exist', () => {
+  // "Unknown keys are false" is a distinct rule from "known keys default from the
+  // table" — a mutation that always falls through to `settingAt(key)?.def ?? false`
+  // without the unknown check would still pass the test above but this pins the
+  // unknown-key path specifically. `settingAt` returns null for junk, so this also
+  // proves getSetting cannot throw on it.
+  resetStorage();
+  assert.equal(getSetting('bogus'), false);
+  assert.equal(getSetting(''), false);
+});
+
+test('setSetting()/getSetting() round-trip: flipping a setting persists the new value', () => {
+  resetStorage();
+  assert.equal(getSetting('haptics'), true);
+  setSetting('haptics', false);
+  assert.equal(getSetting('haptics'), false, 'must read back the stored override, not the default');
+  setSetting('haptics', true);
+  assert.equal(getSetting('haptics'), true, 'must round-trip back on a second flip');
+});
+
+test('setSetting() on one key does not clobber a different key already stored', () => {
+  // Kills a mutation that writes `{[key]: on}` directly instead of spreading the
+  // existing record first — that would silently reset every other setting to its
+  // default the next time ANY toggle was flipped.
+  resetStorage();
+  setSetting('motion', true);
+  setSetting('contrast', true);
+  assert.equal(getSetting('motion'), true, 'motion must survive a later write to a different key');
+  assert.equal(getSetting('contrast'), true);
+  assert.equal(getSetting('haptics'), true, 'untouched keys still read their default');
+});
+
+test('setSetting() on an unknown key is a complete no-op — it does not even write', () => {
+  // Kills a mutation that drops the `settingAt(key)` guard in setSetting: without
+  // it, an unknown/renamed key from an older build could get written straight
+  // into the record instead of being refused at the door.
+  resetStorage();
+  setSetting('bogus', true);
+  assert.equal(fakeStorage.getItem('chickup.settings'), null, 'no settings record should exist at all yet');
+});
+
+test('getSetting() falls back to defaults when the whole settings blob is junk, not just missing', () => {
+  // Mirrors getStreak()'s junk-tolerance test above: an older build's shape, a
+  // hand-edited value, or plain noise must never throw and must never be read
+  // as a live override.
+  resetStorage();
+  for (const raw of ['not json at all', '"a string"', '42', '[1,2,3]', 'null', '{}']) {
+    fakeStorage.setItem('chickup.settings', raw);
+    assert.equal(getSetting('haptics'), true, `raw: ${raw}`);
+    assert.equal(getSetting('motion'), false, `raw: ${raw}`);
+  }
+});
+
+test('getSetting() filters a mixed blob: an unknown key is ignored, a non-boolean value falls back to default', () => {
+  // The exact shape an older build (with a since-removed `music` toggle) or a
+  // hand-edited value could leave behind. Kills a mutation that drops either half
+  // of readSettings's filter — the `settingAt(k)` check or the `typeof on ===
+  // 'boolean'` check.
+  resetStorage();
+  fakeStorage.setItem('chickup.settings', JSON.stringify({ music: true, haptics: 'yes' }));
+  assert.equal(getSetting('music'), false, 'music is not a real setting — must not resurrect as on');
+  assert.equal(getSetting('haptics'), true, '"yes" is not a boolean — must fall back to the true default');
 });

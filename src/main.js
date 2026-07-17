@@ -1,8 +1,8 @@
 // @ts-check
 import { installViewport } from './viewport.js';
-import { installStyles } from './render/styles.js';
+import { installStyles, setReducedMotion } from './render/styles.js';
 import { installToasts } from './render/toast.js';
-import { initAchievementNotices, initMilestoneNotices } from './storage.js';
+import { initAchievementNotices, initMilestoneNotices, getSetting } from './storage.js';
 import { registerScreens, go } from './render/screens/router.js';
 import { splashScreen } from './render/screens/splash.js';
 import { introScreen } from './render/screens/intro.js';
@@ -26,6 +26,9 @@ window.addEventListener('contextmenu', (e) => e.preventDefault());
 const stage = /** @type {HTMLElement} */ (document.getElementById('stage'));
 installViewport(stage);
 installStyles();
+// Before the first screen mounts, or the splash plays its animations once at
+// full motion for a player who asked for none.
+setReducedMotion(getSetting('motion'));
 installToasts(stage);
 // Must run before the first run can end: they decide what this player has already
 // been told, and only an untouched install may be told everything.
