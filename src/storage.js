@@ -3,6 +3,7 @@ import { DEFAULT_OUTFIT, outfitAt } from './core/shop.js';
 import { ACHIEVEMENTS, evaluate } from './core/achievements.js';
 import { MILESTONES, passedMilestones, pendingMilestones, grantFor } from './core/milestone.js';
 import { settingAt } from './core/settings.js';
+import { isValidGhost } from './core/ghost.js';
 
 const K = {
   best: 'chickup.best',
@@ -36,6 +37,10 @@ const K = {
   // Player settings, as a sparse record of overrides. Untrusted like every other
   // key: an older build, a hand-edited value, or plain junk can be in here.
   settings: 'chickup.settings',
+  // The recording of the player's best run, for Race a Ghost. One JSON Ghost:
+  // {seed, taps, metres}. A long run is a few hundred bytes, because only the
+  // tap FRAMES are stored — everything else replays from the simulation.
+  ghost: 'chickup.ghost',
 };
 
 /**
@@ -505,4 +510,39 @@ export function getSetting(key) {
 export function setSetting(key, on) {
   if (!settingAt(key)) return;
   write(K.settings, JSON.stringify({ ...readSettings(), [key]: Boolean(on) }));
+}
+
+/**
+ * The recording of the player's best run, or `null` if there is none.
+ *
+ * Untrusted like every other key — the same discipline as `readStringArray`
+ * (`storage.js:63`): a corrupt value (a string, `null`, an object, an array of
+ * numbers) must fall back cleanly rather than throw or poison the result. Here
+ * that matters more than usual, because a ghost is REPLAYED: hand-edited taps
+ * would drive the simulation with input it can never have produced. `isValidGhost`
+ * exists for exactly this and is the only thing that may decide — it checks the
+ * shape, the finiteness, the integer non-negative frames, and the ascending,
+ * never-adjacent tap invariant a rising edge guarantees.
+ *
+ * @returns {import('./core/ghost.js').Ghost|null}
+ */
+export function getGhost() {
+  try {
+    const raw = localStorage.getItem(K.ghost);
+    if (!raw) return null;
+    const g = JSON.parse(raw);
+    return isValidGhost(g) ? g : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Store a run recording. Refuses an invalid one rather than persisting junk that
+ * `getGhost` would only throw away later.
+ * @param {import('./core/ghost.js').Ghost} ghost
+ */
+export function setGhost(ghost) {
+  if (!isValidGhost(ghost)) return;
+  write(K.ghost, JSON.stringify(ghost));
 }

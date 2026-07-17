@@ -298,6 +298,15 @@ export const ESCAPE = Object.freeze({
 });
 
 /**
+ * Racing your own best run (doc §06, spec D9). `core/ghost.js` already makes a
+ * run reproducible from its seed plus its tap frames; this is only the payout.
+ */
+export const RACE = Object.freeze({
+  /** Feathers for beating the ghost. The doc's `WIN REWARD +50`, verbatim. */
+  winReward: 50,
+});
+
+/**
  * The seven Daily Run modifiers' magnitudes. Kept here, not in `core/modifier.js`,
  * for the same reason every other number is: `modifier.js` holds the RULES, tokens
  * holds the TUNING SURFACE.

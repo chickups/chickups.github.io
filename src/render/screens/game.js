@@ -12,13 +12,14 @@ import { makeField } from '../../core/field.js';
 import { makeZones, truckX } from '../../core/zones.js';
 import { biomeAtY, biomeIndexAtY } from '../../core/biome.js';
 import { createRun, step, scoreOf, radiusOf } from '../../core/run.js';
-import { PHYSICS, SCORING, COLORS, PROPS, HAZARD, ZONES } from '../../core/tokens.js';
+import { PHYSICS, SCORING, COLORS, PROPS, HAZARD, ZONES, RACE } from '../../core/tokens.js';
 import { modifierForDay, applyModifier, baseTuning } from '../../core/modifier.js';
 import { makeInput } from '../../input.js';
+import { makeRecorder, makeGhostPlayer } from '../../core/ghost.js';
 import {
   getBest, recordRun, getEquippedOutfit, setDailyBest,
   getStats, getSeenAchievements, markAchievementsSeen, checkMilestones,
-  getStreak, setStreak, getSetting,
+  getStreak, setStreak, getSetting, getGhost, setGhost, addFeathers,
 } from '../../storage.js';
 import { pendingUnlocks } from '../../core/achievements.js';
 import { toastAchievement } from '../toast.js';
@@ -65,15 +66,45 @@ export function gameScreen(go, arg) {
     daily && arg && Number.isFinite(arg.day)
       ? arg.day
       : dayNumber(Date.now(), new Date().getTimezoneOffset());
-  const seed = daily ? dailySeed(day) : ((Date.now() >>> 0) || 1);
+  // A race must run on the GHOST'S OWN seed: a ghost is only valid against the
+  // field it was recorded on (ghost.js), and replaying it against any other one
+  // reproduces nothing. getGhost() has already run it past isValidGhost, so a
+  // corrupt or hand-edited recording arrives here as null and this is an
+  // ordinary run — a tampered store must never be able to drive the simulation.
+  const ghost = arg && arg.race ? getGhost() : null;
+  const seed = ghost ? ghost.seed : (daily ? dailySeed(day) : ((Date.now() >>> 0) || 1));
   // The route comes from the seed; the RULES come from the modifier. Two separate
   // jobs, deliberately: `dailySeed` identifies which route today is, and
   // `modifierForDay` picks which of the seven modifiers is applied to it. A plain
   // run gets `baseTuning()`, which is every token default — i.e. no change at all.
+  //
+  // A ghost is only ever recorded from a NON-daily run (see the `setGhost` call
+  // below) — a Ghost is `{seed, taps, metres}` with no tuning field, and a daily
+  // run's modifier changes the field layout itself (e.g. Thin Air's gapMax), not
+  // just the physics. A race is never `daily`, so this is `baseTuning()` here too,
+  // matching the tuning the recording was made under. If a ghost could ever come
+  // from a modified run, this line would have to recover which modifier — and it
+  // cannot, because the Ghost shape (locked, core/ghost.js) does not carry one.
   const tuning = daily ? applyModifier(modifierForDay(day)) : baseTuning();
   const field = makeField(seed, tuning);
   const zones = makeZones(seed, field, tuning);
   let state = createRun(field, vp.h);
+
+  // Record EVERY (non-daily) run, not just races: the ghost is "my best run",
+  // and the run that becomes the best is an ordinary one. Only tap FRAMES are
+  // stored — the rest replays from the simulation, so a long run is a few
+  // hundred bytes. Restricted to non-daily runs for the tuning reason above.
+  const recorder = makeRecorder(seed);
+  /** The fixed-timestep frame counter. NOT the rAF frame: rAF's rate varies with
+   *  the display and with every hitch, and a recording indexed by it would mean
+   *  nothing on another machine. */
+  let frameNo = 0;
+
+  const ghostPlayer = ghost ? makeGhostPlayer(ghost) : null;
+  /** The ghost's own simulation: same field, same zones, same fixed step, its
+   *  own state. It is a second run, not an animation of a stored path — which is
+   *  the whole trick, and why a few hundred bytes are enough. */
+  let ghostState = ghostPlayer ? createRun(field, vp.h) : null;
 
   const best = getBest();
   const outfit = getEquippedOutfit();
@@ -94,6 +125,15 @@ export function gameScreen(go, arg) {
     zIndex: '6', willChange: 'transform',
   }, peep(PHYSICS.peepSize, 'run', outfit, false));
 
+  const ghostEl = ghostPlayer
+    ? el('div', {
+        position: 'absolute', left: '0px', top: '0px',
+        width: px(PHYSICS.peepSize), height: px(PHYSICS.peepSize),
+        zIndex: '5', opacity: '0.45', filter: 'grayscale(1)', willChange: 'transform',
+        pointerEvents: 'none',
+      }, peep(PHYSICS.peepSize, 'fly', 'none', false))
+    : null;
+
   // The doc's red-dashed BEST line: a real place in the world, only drawable
   // because the camera never descends.
   const bestY = state.startY + best * SCORING.pointsPerMetre;
@@ -111,6 +151,7 @@ export function gameScreen(go, arg) {
       )
     : null;
   if (bestLine) world.appendChild(bestLine);
+  if (ghostEl) world.appendChild(ghostEl);   // before peepEl — zIndex 5 sits under Peep's 6
   world.appendChild(peepEl);
 
   const hud = makeHud(() => go('pause', { state, seed }));
@@ -245,6 +286,17 @@ export function gameScreen(go, arg) {
     peepEl.style.transform =
       `translate(${px(state.x - PHYSICS.peepSize / 2)},${px(-state.y - PHYSICS.peepSize / 2)}) rotate(${rotation}deg)`;
 
+    if (ghostEl && ghostState) {
+      // Hidden once dead rather than left lying at its last position, where it
+      // would read as a live rival standing still.
+      ghostEl.style.display = ghostState.phase === 'dead' ? 'none' : 'block';
+      const gRot = ghostState.phase === 'orbit'
+        ? -ghostState.angle * DEG
+        : Math.atan2(ghostState.vx, ghostState.vy) * DEG;
+      ghostEl.style.transform =
+        `translate(${px(ghostState.x - PHYSICS.peepSize / 2)},${px(-ghostState.y - PHYSICS.peepSize / 2)}) rotate(${gRot}deg)`;
+    }
+
     // Tutorial Hints off means no bubble at all. `hud.update` already treats an
     // empty string as "hide the bubble", so this needs no HUD change.
     let tip = '';
@@ -299,8 +351,25 @@ export function gameScreen(go, arg) {
       // Polled once per TICK, not once per frame: isPressed() consumes the press
       // latch, so a tap that came and went between frames still lands on exactly
       // one tick.
-      state = step(state, field, FIXED_DT, input.isPressed(), h, zones, tuning);
+      const pressed = input.isPressed();
+      // Note the EDGE, before stepping — `step` derives `tapped` the same way
+      // (run.js) and then overwrites `wasPressed`, so asking afterwards would
+      // record the wrong thing. A one-frame press per recorded frame reproduces
+      // the identical edge sequence; see ghost.js's header.
+      recorder.note(frameNo, pressed && !state.wasPressed);
+      state = step(state, field, FIXED_DT, pressed, h, zones, tuning);
+      frameNo++;
       if (state.chain > maxChain) maxChain = state.chain;
+
+      // Stepped on the SAME tick with the SAME dt, so the two runs share a frame
+      // index and the recording's frame numbers mean what they meant when it was
+      // made. `step` returns its input unchanged once phase is 'dead' (run.js),
+      // so a ghost that dies first simply stops moving. `frameNo - 1`: the
+      // counter has already advanced past the frame just simulated, and the
+      // ghost must be asked about THAT frame.
+      if (ghostState && ghostPlayer) {
+        ghostState = step(ghostState, field, FIXED_DT, ghostPlayer.pressedAt(frameNo - 1), h, zones, tuning);
+      }
 
       if (state.phase === 'fly' && prevPhase === 'orbit') medium();
       if (state.phase === 'orbit' && prevPhase === 'fly') tap();
@@ -334,6 +403,14 @@ export function gameScreen(go, arg) {
         // is idempotent for the same day, so a second run today is free of charge
         // and costs nothing to call unconditionally here.
         setStreak(advanceStreak(getStreak(), day));
+      } else if (metres > best) {
+        // Store the recording only when the run is the new best — the ghost IS
+        // the best run. `metres > best` is the same comparison the New Best
+        // screen makes below, deliberately: the two must never disagree about
+        // which run was the best one. Restricted to non-daily runs: a Ghost
+        // carries no tuning, so only a baseTuning() run (never a modified daily
+        // one) can ever be replayed back with the tuning it was recorded under.
+        setGhost(recorder.finish(metres));
       }
 
       // Read stats back only AFTER recordRun has written them — an achievement is a
@@ -353,6 +430,20 @@ export function gameScreen(go, arg) {
       // the player leaves the terminal screen, never on top of it.
       const rungs = checkMilestones(getStats());
       if (rungs.length > 0) queueReward(rungs[rungs.length - 1].grant);
+
+      if (ghost) {
+        // The race result owns a race's ending: New Best would be a strange
+        // second screen arguing about the same run, and the record is kept
+        // either way — recordRun ran above. Same shape as the spec's
+        // won-over-best precedence: the larger event owns the screen.
+        const won = metres > ghost.metres;
+        // Separate from recordRun's addFeathers(state.feathers) — this is the
+        // prize, not the run's earnings. addFeathers is not idempotent, so it
+        // must be called exactly once, here.
+        if (won) addFeathers(RACE.winReward);
+        go('race', { result: { metres, ghostMetres: ghost.metres, won } });
+        return;
+      }
 
       const isBest = metres > best;
       go(isBest ? 'best' : 'oops', {

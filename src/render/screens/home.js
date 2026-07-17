@@ -7,7 +7,7 @@ import { logo } from '../art/logo.js';
 import { icon } from '../art/icon.js';
 import { primaryButton, pill, card, iconButton } from '../ui.js';
 import { COLORS } from '../../core/tokens.js';
-import { getFeathers, markIntroSeen, getEquippedOutfit, getDailyBest, getStreak } from '../../storage.js';
+import { getFeathers, markIntroSeen, getEquippedOutfit, getDailyBest, getStreak, getGhost } from '../../storage.js';
 import { dayNumber } from '../../core/daily.js';
 
 /**
@@ -41,6 +41,15 @@ function streakLabel() {
   // Negative means the clock moved backwards; the streak is still the player's.
   if (today - streak.day > 1) return '0';
   return String(streak.length);
+}
+
+/**
+ * The ghost card's subtitle. Reads the store here in render/, never in core/.
+ * @returns {string}
+ */
+function raceCardLabel() {
+  const ghost = getGhost();
+  return ghost ? `Beat ${ghost.metres} m` : 'Beat your best';
 }
 
 /**
@@ -122,7 +131,9 @@ export function homeScreen(go) {
         // the day's modifier and the streak ladder to show first — jumping straight
         // into `game` was the placeholder while that screen did not exist.
         card('Daily Run', todaysRouteLabel(), { onTap: () => go('daily') }),
-        card('Race a Ghost', 'Beat your best', { disabled: true, badge: 'SOON' }),
+        // No longer SOON: core/ghost.js has been complete since slice 2, and the
+        // screen it was waiting for now exists.
+        card('Race a Ghost', raceCardLabel(), { onTap: () => go('race') }),
       ),
     ),
   );
