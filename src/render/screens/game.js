@@ -51,7 +51,7 @@ export function gameScreen(go, arg) {
   const day = dayNumber(Date.now(), new Date().getTimezoneOffset());
   const seed = daily ? dailySeed(day) : ((Date.now() >>> 0) || 1);
   const field = makeField(seed);
-  const zones = makeZones(seed);
+  const zones = makeZones(seed, field);
   let state = createRun(field, vp.h);
 
   const best = getBest();
