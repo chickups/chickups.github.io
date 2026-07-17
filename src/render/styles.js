@@ -86,6 +86,16 @@ const CSS = `
 @keyframes pTwinkle{0%,100%{transform:scale(.7) rotate(0);opacity:.6}50%{transform:scale(1.1) rotate(20deg);opacity:1}}
 @keyframes pFade{from{opacity:0}to{opacity:1}}
 
+/* Achievement toast. toastIn's easing overshoots, so the banner lands with a
+   bounce instead of sliding to a stop; the keyframes only fade, or the two
+   would fight over transform. */
+@keyframes toastIn{from{transform:translateY(-160%);opacity:0}40%{opacity:1}to{transform:translateY(0);opacity:1}}
+@keyframes toastOut{from{transform:translateY(0);opacity:1}to{transform:translateY(-160%);opacity:0}}
+@keyframes toastBadge{0%,100%{transform:rotate(0) scale(1)}25%{transform:rotate(-14deg) scale(1.14)}60%{transform:rotate(12deg) scale(1.08)}}
+/* Travels 78pt: it starts behind the ~62pt-tall card, so anything less plays the
+   whole burst out of sight behind it. */
+@keyframes toastConf{0%{transform:translate(0,0) rotate(0);opacity:0}18%{opacity:1}100%{transform:translate(var(--dx,0),78px) rotate(240deg);opacity:0}}
+
 @media (prefers-reduced-motion: reduce) {
   /* Doc §12: parallax, confetti and idle bounces fall back to fades.
      Gameplay motion is NOT animation-driven — Peep and the field are moved by
