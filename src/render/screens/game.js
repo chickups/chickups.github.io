@@ -318,7 +318,7 @@ export function gameScreen(go, arg) {
     if (ghostEl && ghostState) {
       // Hidden once dead rather than left lying at its last position, where it
       // would read as a live rival standing still.
-      ghostEl.style.display = ghostState.phase === 'dead' ? 'none' : 'block';
+      ghostEl.style.display = (ghostState.phase === 'dead' || state.phase === 'won') ? 'none' : 'block';
       const gRot = ghostState.phase === 'orbit'
         ? -ghostState.angle * DEG
         : Math.atan2(ghostState.vx, ghostState.vy) * DEG;

@@ -58,12 +58,14 @@ export function introScreen(go) {
     position: 'absolute', top: px(66), right: px(20), zIndex: '30', cursor: 'pointer',
     background: 'rgba(255,251,240,.16)', color: '#FFFBF0',
     font: `800 ${px(15)} 'Nunito'`, padding: `0 ${px(18)}`,
-    // Doc §11: every tappable target is >= TAP_MIN tall. The `font` shorthand
-    // above resets line-height to normal (~1.2), which alone only gets this to
-    // ~36.5pt (padding + line box) — short of the minimum, and this is the
-    // ONLY escape from the intro. minHeight + flex centering guarantees the
-    // real rendered box, not just the text line, meets it.
-    minHeight: px(TAP_MIN), display: 'flex', alignItems: 'center', justifyContent: 'center',
+    // Doc §11: every tappable target is >= TAP_MIN in both dimensions. The
+    // `font` shorthand above resets line-height to normal (~1.2), which alone
+    // only gets this to ~36.5pt tall (padding + line box) — short of the
+    // minimum, and this is the ONLY escape from the intro. minWidth/minHeight
+    // + flex centering guarantee the real rendered box, not just the text
+    // line, meets it in both directions without moving the label or its
+    // top/right anchor.
+    minWidth: px(TAP_MIN), minHeight: px(TAP_MIN), display: 'flex', alignItems: 'center', justifyContent: 'center',
     borderRadius: px(20),
   }, 'Skip');
   skip.addEventListener('pointerdown', done);
