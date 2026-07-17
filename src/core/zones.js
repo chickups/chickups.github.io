@@ -1,7 +1,7 @@
 // @ts-check
 import { makeRng } from './rng.js';
-import { ZONES, HAZARD, SCORING, DESIGN } from './tokens.js';
-import { biomeAt } from './biome.js';
+import { ZONES, HAZARD, DESIGN } from './tokens.js';
+import { biomeAtY } from './biome.js';
 
 /** @typedef {{x:number, y:number, w:number, h:number}} Updraft */
 /** @typedef {{y:number, dir:1|-1, speed:number, phase:number}} Truck */
@@ -60,7 +60,7 @@ export function makeZones(seed) {
       const xDraw = updraftRng();
       const y = prevY + ZONES.updraftEvery * (0.75 + 0.5 * spacingDraw);
       updraftY.push(y);
-      const biome = biomeAt(y / SCORING.pointsPerMetre);
+      const biome = biomeAtY(y);
       let zone = null;
       if (biome.key === 'ridge' || biome.key === 'escape') {
         const x = ZONES.updraftW / 2 + xDraw * (DESIGN.width - ZONES.updraftW);
@@ -103,7 +103,7 @@ export function makeZones(seed) {
       const phaseDraw = truckRng();
       const y = prevY + HAZARD.truckEvery * (0.75 + 0.5 * spacingDraw);
       truckY.push(y);
-      const biome = biomeAt(y / SCORING.pointsPerMetre);
+      const biome = biomeAtY(y);
       let truck = null;
       if (biome.trucks) {
         const dir = /** @type {1|-1} */ (dirDraw < 0.5 ? -1 : 1);

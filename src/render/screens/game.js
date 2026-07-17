@@ -10,9 +10,9 @@ import { hazardTruck } from '../art/hazardTruck.js';
 import { updraft } from '../art/updraft.js';
 import { makeField } from '../../core/field.js';
 import { makeZones, truckX } from '../../core/zones.js';
-import { biomeAt, biomeIndexAt } from '../../core/biome.js';
+import { biomeAtY, biomeIndexAtY } from '../../core/biome.js';
 import { createRun, step, scoreOf, radiusOf } from '../../core/run.js';
-import { PHYSICS, SCORING, COLORS, PROPS, HAZARD } from '../../core/tokens.js';
+import { PHYSICS, SCORING, COLORS, PROPS, HAZARD, ZONES } from '../../core/tokens.js';
 import { makeInput } from '../../input.js';
 import { getBest, recordRun, getEquippedOutfit, setDailyBest } from '../../storage.js';
 import { dayNumber, dailySeed } from '../../core/daily.js';
@@ -21,9 +21,17 @@ import { tap, medium } from '../../haptics.js';
 
 const DEG = 180 / Math.PI;
 
-/** How far beyond the viewport a prop is kept alive. Sized to the LARGEST prop —
- *  a gear is wider than a tire, so a tire-sized band pops gears in at the edge. */
-const CULL_BAND = Math.max(radiusOf('gear'), PROPS.padRadius) + PHYSICS.grabTolerance;
+/** How far beyond the viewport a pooled object is kept alive. Sized to the
+ *  LARGEST half-extent of ANY object this screen pools — never a hardcoded
+ *  number, or it goes stale the next time something new is added. Vertical
+ *  culling only, so what matters is each object's half-HEIGHT (or radius, for
+ *  the circular props, where half-width == half-height):
+ *   gear 77.5, tire 62, pad 46, truck 32 — and updraft 130, the actual max.
+ *  An updraft used to be culled while its bottom edge was still visibly inside
+ *  the viewport (130 - the old 105.5 band = 24.5pt of pop-in) — see final-fixes
+ *  report #4. */
+const CULL_BAND =
+  Math.max(radiusOf('gear'), PROPS.padRadius, HAZARD.truckH / 2, ZONES.updraftH / 2) + PHYSICS.grabTolerance;
 
 /** Tip copy, verbatim from doc §04. */
 const TIP_TAP = 'Tap to launch!';
@@ -216,7 +224,12 @@ export function gameScreen(go, arg) {
     if (!state.everLaunched) tip = TIP_TAP;
     else if (!state.everGrabbed) tip = TIP_LAND;
 
-    const biome = biomeAt(scoreOf(state));
+    // biomeAtY, not biomeAt(scoreOf(state)): the field generator (field.js/zones.js)
+    // always keys a prop's biome off ABSOLUTE world height. scoreOf is climbed
+    // distance from state.startY (a different zero point, offset by the orbit
+    // radius) — feeding that into biomeAt disagreed with what the field actually
+    // built near every boundary. See final-fixes report #5.
+    const biome = biomeAtY(state.maxY);
     bg.setSky(biome.key);
     hud.update(scoreOf(state), state.mult, tip, biome.key);
   }
@@ -278,7 +291,10 @@ export function gameScreen(go, arg) {
         metres,
         feathers: state.feathers,
         maxChain,
-        biomeIndex: biomeIndexAt(metres),
+        // Absolute height again (see the biomeAtY call in paint()), so the
+        // biome credited for achievements matches the one the field and the
+        // live HUD actually showed, not a start-relative reading of it.
+        biomeIndex: biomeIndexAtY(state.maxY),
       });
       if (daily) setDailyBest(day, metres);
       const isBest = metres > best;
