@@ -304,3 +304,157 @@ test('an omitted tuning leaves zones.js exactly as it was', () => {
   assert.deepEqual(a.updraftsInRange(0, 20000), b.updraftsInRange(0, 20000));
   assert.deepEqual(a.trucksInRange(0, 20000), b.trucksInRange(0, 20000));
 });
+
+const DT = 1 / 60;
+const VH = 852;
+
+/**
+ * The lowest index that actually carries a pad. NOT a fixed index: roadside's
+ * `padChance` is 0 and orchard (the first biome with pads) does not open until
+ * 150m, so seed 4242's first pad is at index 10 and every index below it is null.
+ * @param {import('./field.js').Field} f
+ */
+function firstPadIndex(f) {
+  for (let i = 0; i < 60; i++) if (f.padAt(i)) return i;
+  throw new Error('no pad in the first 60 indices — this field cannot test a bounce');
+}
+
+/**
+ * A tap at frame 0 launches off the starting orbit at an angle that flies Peep
+ * into open air, and the run dies ~98 frames later having grabbed nothing. The
+ * orbit has to come round to a launching angle first — hence the wait. Any frame
+ * in ~42..49 works on every seed tried; 45 sits in the middle of that window.
+ */
+const TAP_FRAME = 45;
+
+test('run.js reads tuning.padBounceMod — Bouncy Hay launches farther off a pad', () => {
+  const bouncy = applyModifier(MODIFIERS.find((m) => m.key === 'bouncyHay') || null);
+  // Drive Peep onto a pad and compare the bounce speed the frame it fires.
+  const bounceSpeed = (tuning) => {
+    const f = makeField(4242, tuning);
+    const pad = f.padAt(firstPadIndex(f));
+    assert.ok(pad, 'seed 4242 must have a pad for this test to mean anything');
+    let s = createRun(f, VH);
+    // Teleport onto the pad: this tests the bounce rule, not the flight to it.
+    s = { ...s, phase: 'fly', x: pad.x, y: pad.y, vx: 0, vy: -100, lockPad: -1, lockWheel: -1 };
+    const after = step(s, f, DT, false, VH, undefined, tuning);
+    return after.vy;
+  };
+  const plain = bounceSpeed(baseTuning());
+  const boosted = bounceSpeed(bouncy);
+  assert.ok(plain > 0, `a pad must bounce Peep upward, got ${plain}`);
+  assert.ok(
+    Math.abs(boosted / plain - MODIFIER.bouncyHayMod) < 1e-6,
+    `Bouncy Hay must scale the bounce by ${MODIFIER.bouncyHayMod}: ${boosted} vs ${plain}`,
+  );
+});
+
+test('run.js reads tuning.featherScale — Feather Frenzy doubles the take', () => {
+  const frenzy = applyModifier(MODIFIERS.find((m) => m.key === 'featherFrenzy') || null);
+  const feathersAfterAGrab = (tuning) => {
+    const f = makeField(1, tuning);
+    let s = createRun(f, VH);
+    for (let i = 0; i < TAP_FRAME; i++) s = step(s, f, DT, false, VH, undefined, tuning);
+    s = step(s, f, DT, true, VH, undefined, tuning); // tap -> launch
+    // Fly until the automatic re-attach banks a chain link.
+    for (let i = 0; i < 600 && s.feathers === 0 && s.phase !== 'dead'; i++) {
+      s = step(s, f, DT, false, VH, undefined, tuning);
+    }
+    return s.feathers;
+  };
+  const plain = feathersAfterAGrab(baseTuning());
+  assert.ok(plain > 0, 'the plain run must bank a feather to compare against');
+  assert.equal(feathersAfterAGrab(frenzy), plain * MODIFIER.featherFrenzyScale);
+});
+
+test('feathers stay whole numbers under every modifier', () => {
+  // The HUD and the wallet both count feathers; a fractional feather would render
+  // as "12.5" and round differently in two places.
+  for (const mod of [null, ...MODIFIERS]) {
+    const tuning = applyModifier(mod);
+    const f = makeField(1, tuning);
+    let s = createRun(f, VH);
+    for (let i = 0; i < TAP_FRAME; i++) s = step(s, f, DT, false, VH, undefined, tuning);
+    s = step(s, f, DT, true, VH, undefined, tuning);
+    for (let i = 0; i < 600 && s.phase !== 'dead'; i++) {
+      s = step(s, f, DT, false, VH, undefined, tuning);
+      assert.ok(Number.isInteger(s.feathers), `${mod ? mod.key : 'base'} banked ${s.feathers}`);
+    }
+    // Integer-ness alone is a test that passes on a run that banks NOTHING — zero is
+    // a fine integer. The run must actually reach the code under test.
+    assert.ok(s.feathers > 0, `${mod ? mod.key : 'base'} banked no feather — this proved nothing`);
+  }
+});
+
+test('an omitted tuning leaves run.js exactly as it was', () => {
+  const f = makeField(1);
+  const run = (tuning) => {
+    const go = (s, pressed) =>
+      tuning ? step(s, f, DT, pressed, VH, undefined, tuning) : step(s, f, DT, pressed, VH);
+    let s = createRun(f, VH);
+    for (let i = 0; i < TAP_FRAME; i++) s = go(s, false);
+    s = go(s, true);
+    for (let i = 0; i < 300 && s.phase !== 'dead'; i++) s = go(s, false);
+    return s;
+  };
+  const omitted = run(null);
+  // The run has to actually exercise a grab, or "identical" is only a claim about
+  // two runs that both did nothing.
+  assert.ok(omitted.feathers > 0, 'the comparison run must bank a feather to be worth comparing');
+  assert.deepEqual(omitted, run(baseTuning()));
+});
+
+test('run.js reads tuning.updraftScale — Tailwind lifts harder AND raises the ceiling', () => {
+  // The brief threads updraftScale into run.js's lift but specifies no test for it.
+  // Without this, run.js ignoring updraftScale altogether passes the whole suite —
+  // zones.js's Tailwind tests only cover where drafts SIT, never how hard they push.
+  const tailwind = applyModifier(MODIFIERS.find((m) => m.key === 'tailwind') || null);
+  const f = makeField(1);
+
+  // A hand-built zones stub holding Peep permanently inside one updraft. Driving the
+  // real stream here would test the spawn geometry, not the lift rule.
+  const inDraft = (y) => ({
+    updraftsInRange: () => [{ x: 100, y, w: 400, h: 4000 }],
+    trucksInRange: () => [],
+  });
+
+  const flyAt = (vy) => ({
+    ...createRun(f, VH),
+    phase: 'fly',
+    x: 100,
+    y: 5000,
+    vx: 0,
+    vy,
+    lockPad: -1,
+    lockWheel: -1,
+  });
+
+  // One frame of lift from rest, before any clamp can bind. NOT a ratio: the same
+  // frame also applies gravity, so vy is (updraftLift - gravity) * dt and the RATIO
+  // of the two results is 1.46, not 1.25. The LIFT term is what scales, so compare
+  // the difference — gravity is common to both and cancels exactly.
+  const oneFrame = (tuning) => step(flyAt(0), f, DT, false, VH, inDraft(5000), tuning).vy;
+  const plainVy = oneFrame(baseTuning());
+  const windyVy = oneFrame(tailwind);
+  assert.ok(plainVy > 0, `an updraft must push Peep up, got ${plainVy}`);
+  const extraLift = ZONES.updraftLift * (MODIFIER.tailwindScale - 1) * DT;
+  assert.ok(
+    Math.abs(windyVy - plainVy - extraLift) < 1e-9,
+    `Tailwind must add ${extraLift} pt/s of lift in a frame: ${windyVy} vs ${plainVy}`,
+  );
+
+  // And the CEILING moves too. Scaling the lift alone would be nearly invisible:
+  // vy clamps at updraftMaxV either way, so a stronger push reaches the same
+  // 300 pt/s a few frames sooner and then stops. Hold Peep in the draft until vy
+  // saturates and read the plateau.
+  const terminal = (tuning) => {
+    let s = flyAt(0);
+    for (let i = 0; i < 400; i++) s = step({ ...s, y: 5000 }, f, DT, false, VH, inDraft(5000), tuning);
+    return s.vy;
+  };
+  assert.ok(Math.abs(terminal(baseTuning()) - ZONES.updraftMaxV) < 1e-9, 'plain tops out at updraftMaxV');
+  assert.ok(
+    Math.abs(terminal(tailwind) - ZONES.updraftMaxV * MODIFIER.tailwindScale) < 1e-9,
+    `Tailwind's ceiling must be ${ZONES.updraftMaxV * MODIFIER.tailwindScale}, got ${terminal(tailwind)}`,
+  );
+});

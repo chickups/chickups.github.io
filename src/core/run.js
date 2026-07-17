@@ -2,6 +2,7 @@
 import { PHYSICS, SCORING, CAMERA, PROPS, ZONES, HAZARD } from './tokens.js';
 import { orbitPosition, stepOrbit, launchVelocity, stepFly, findGrab } from './physics.js';
 import { truckX } from './zones.js';
+import { baseTuning } from './modifier.js';
 
 /** @typedef {import('./field.js').Field} Field */
 /** @typedef {import('./field.js').Prop} Prop */
@@ -121,9 +122,13 @@ export function createRun(field, viewportH) {
  * @param {boolean} pressed raw input: is the button down this frame?
  * @param {number} viewportH points
  * @param {Zones} [zones] updraft/truck streams; omit for a plain run with neither
+ * @param {import('./modifier.js').RunTuning} [tuning] Daily Run modifiers. Three knobs
+ *   reach here — `padBounceMod`, `featherScale` and `updraftScale`. Omitted, it is a
+ *   plain unmodified run, identical to what this function did before modifiers existed.
+ *   `createRun` takes no tuning: it reads none of the seven knobs.
  * @returns {RunState}
  */
-export function step(state, field, dt, pressed, viewportH, zones = EMPTY_ZONES) {
+export function step(state, field, dt, pressed, viewportH, zones = EMPTY_ZONES, tuning = baseTuning()) {
   if (state.phase === 'dead') return state;
 
   const s = { ...state };
@@ -174,7 +179,13 @@ export function step(state, field, dt, pressed, viewportH, zones = EMPTY_ZONES) 
         (u) => Math.abs(s.x - u.x) <= u.w / 2 && Math.abs(s.y - u.y) <= u.h / 2,
       );
     if (inUpdraft) {
-      s.vy = Math.min(ZONES.updraftMaxV, s.vy + ZONES.updraftLift * dt);
+      // Tailwind scales the lift AND the ceiling. Scaling the lift alone would do
+      // almost nothing visible: vy clamps at updraftMaxV either way, so a stronger
+      // push would just reach the same 300 pt/s a few frames sooner.
+      s.vy = Math.min(
+        ZONES.updraftMaxV * tuning.updraftScale,
+        s.vy + ZONES.updraftLift * tuning.updraftScale * dt,
+      );
     }
 
     // Falling below the wheel you last left breaks the chain: the multiplier
@@ -213,7 +224,10 @@ export function step(state, field, dt, pressed, viewportH, zones = EMPTY_ZONES) 
     if (padHit) {
       // No tap, no attach: a pad bypasses the hold-release verb entirely.
       // vx is untouched, so it grants no steering.
-      s.vy = PROPS.padBounce;
+      // tuning.padBounceMod is the MODIFIER's dial (Bouncy Hay = 1.3), 1.0 at base.
+      // It is NOT `PROPS.padBounceScale`, the contact-speed physics factor — the two
+      // share a name from the interface contract and multiply independently.
+      s.vy = PROPS.padBounce * tuning.padBounceMod;
       s.lastWheelY = padHit.pad.y;
       s.lockPad = padHit.index;
     } else {
@@ -243,7 +257,9 @@ export function step(state, field, dt, pressed, viewportH, zones = EMPTY_ZONES) 
         if (s.chain % SCORING.chainPerMult === 0) {
           s.mult = Math.min(SCORING.multMax, s.mult + 1);
         }
-        s.feathers += s.mult;
+        // Feather Frenzy doubles the take. Rounded, because a fractional feather
+        // would render as "12.5" in the HUD and round differently in the wallet.
+        s.feathers += Math.round(s.mult * tuning.featherScale);
         s.everGrabbed = true;
       }
     }
