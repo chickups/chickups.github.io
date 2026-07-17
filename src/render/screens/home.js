@@ -117,7 +117,11 @@ export function homeScreen(go) {
         // The daily route needs no server: the field is a pure function of its
         // seed, so seeding from the date gives everyone the same route without
         // anyone distributing it. Only a leaderboard would need a backend.
-        card('Daily Run', todaysRouteLabel(), { onTap: () => go('game', { daily: true }) }),
+        //
+        // The card opens the Daily screen; the Daily screen starts the run. It has
+        // the day's modifier and the streak ladder to show first — jumping straight
+        // into `game` was the placeholder while that screen did not exist.
+        card('Daily Run', todaysRouteLabel(), { onTap: () => go('daily') }),
         card('Race a Ghost', 'Beat your best', { disabled: true, badge: 'SOON' }),
       ),
     ),

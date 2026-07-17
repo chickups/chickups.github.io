@@ -16,6 +16,7 @@ import { rewardScreen } from './render/screens/reward.js';
 import { shopScreen } from './render/screens/shop.js';
 import { achievementsScreen } from './render/screens/achievements.js';
 import { settingsScreen } from './render/screens/settings.js';
+import { dailyScreen } from './render/screens/daily.js';
 
 // No browser context menu anywhere: a right-click on desktop or a long-press on
 // touch would otherwise raise it mid-run, over a game whose only verb is a tap.
@@ -44,6 +45,7 @@ registerScreens(stage, {
   shop: shopScreen,
   achievements: achievementsScreen,
   settings: settingsScreen,
+  daily: dailyScreen,
 });
 
 go('splash');
