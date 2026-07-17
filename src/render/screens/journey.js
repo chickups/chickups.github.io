@@ -1,7 +1,7 @@
 // @ts-check
 import { el, px } from '../el.js';
 import { icon } from '../art/icon.js';
-import { secondaryButton, pill } from '../ui.js';
+import { secondaryButton, pill, iconButton } from '../ui.js';
 import { COLORS } from '../../core/tokens.js';
 import { getBest } from '../../storage.js';
 import { BIOMES, biomeIndexAt } from '../../core/biome.js';
@@ -46,15 +46,9 @@ export function journeyScreen(go) {
 
   const backButton = el(
     'div',
-    {
-      position: 'absolute', top: px(56), left: px(20), zIndex: '30',
-      width: px(44), height: px(44), borderRadius: '50%',
-      background: 'rgba(255,251,240,.92)', boxShadow: '0 3px 0 rgba(75,53,36,.12)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-    },
-    icon('chevL', 22, COLORS.ink),
+    { position: 'absolute', top: px(56), left: px(20), zIndex: '30' },
+    iconButton('chevL', () => go('home')),
   );
-  backButton.addEventListener('click', () => go('home'));
 
   const nodes = BIOMES.map((biome, i) => {
     const reached = i <= reachedIdx;

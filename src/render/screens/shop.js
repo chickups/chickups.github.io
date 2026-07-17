@@ -1,8 +1,7 @@
 // @ts-check
 import { el, px } from '../el.js';
 import { peep } from '../art/peep.js';
-import { icon } from '../art/icon.js';
-import { pill, secondaryButton, pressable, TAP_MIN } from '../ui.js';
+import { pill, secondaryButton, pressable, iconButton, TAP_MIN } from '../ui.js';
 import { COLORS } from '../../core/tokens.js';
 import { OUTFITS, DEFAULT_OUTFIT, canAfford, purchase } from '../../core/shop.js';
 import {
@@ -145,17 +144,14 @@ export function shopScreen(go) {
   // which re-reads storage from scratch. No local DOM patching to keep in sync.
   const refresh = () => go('shop');
 
+  // The wrapper owns placement; iconButton owns the lip. Keeping them apart is
+  // required — `pressable` writes `transform`, which a positioning transform
+  // would silently overwrite.
   const backButton = el(
     'div',
-    {
-      position: 'absolute', top: px(56), left: px(20), zIndex: '30',
-      width: px(44), height: px(44), borderRadius: '50%',
-      background: 'rgba(255,251,240,.92)', boxShadow: '0 3px 0 rgba(75,53,36,.12)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-    },
-    icon('chevL', 22, COLORS.ink),
+    { position: 'absolute', top: px(56), left: px(20), zIndex: '30' },
+    iconButton('chevL', () => go('home')),
   );
-  backButton.addEventListener('click', () => go('home'));
 
   /** @type {ShopEntry[]} */
   const entries = [NONE_ENTRY, ...OUTFITS];

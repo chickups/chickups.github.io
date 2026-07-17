@@ -22,7 +22,7 @@ import { pendingUnlocks } from '../../core/achievements.js';
 import { toastAchievement } from '../toast.js';
 import { dayNumber, dailySeed } from '../../core/daily.js';
 import { viewportPoints } from '../../viewport.js';
-import { tap, medium } from '../../haptics.js';
+import { tap, medium, rigid } from '../../haptics.js';
 
 const DEG = 180 / Math.PI;
 
@@ -289,6 +289,8 @@ export function gameScreen(go, arg) {
 
     if (state.phase === 'dead') {
       stopped = true;
+      // §12: collision · rigid. A fall is not a collision — it fires nothing, by design.
+      if (state.deathBy === 'truck') rigid();
       const metres = scoreOf(state);
       // recordRun does setBest and addFeathers itself. Calling those here too
       // would credit the feathers twice — addFeathers is not idempotent.
