@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { createRun, step, scoreOf, radiusOf, rateOf, endScreenOf } from './run.js';
 import { makeField } from './field.js';
 import { PHYSICS, SCORING, PROPS, ZONES, HAZARD, FIELD, ESCAPE } from './tokens.js';
-import { baseTuning } from './modifier.js';
+import { baseTuning, applyModifier, MODIFIERS } from './modifier.js';
 import { BIOMES } from './biome.js';
 
 const VH = 852;
@@ -761,6 +761,39 @@ test('a won run is terminal and never becomes a death', () => {
   // chance. A win must survive every one of them.
   for (let i = 0; i < 600; i++) s = step(s, f, DT, true, 852);
   assert.equal(s.phase, 'won', 'a win must be terminal — step returns it untouched');
+});
+
+test('Low Ceiling actually lowers the win height — the win reads tuning, not the raw token', () => {
+  // The whole point of the RunTuning seam: the win check must read
+  // `tuning.truckHeightM`, which Low Ceiling overrides to 1100m. A bare
+  // `ESCAPE.truckHeightM` (1200) would ignore the modifier entirely — Low
+  // Ceiling would advertise "the truck leaves early" and change nothing.
+  // `step`'s zones default is a private const, so mirror it here to reach the
+  // 7th (tuning) argument.
+  const emptyZones = { updraftsInRange: () => [], trucksInRange: () => [] };
+  const f = makeField(1);
+  const lowCeiling = applyModifier(MODIFIERS.find((m) => m.key === 'lowCeiling'));
+  assert.ok(lowCeiling.truckHeightM < ESCAPE.truckHeightM, 'guard: Low Ceiling really is lower');
+
+  // Peep at the 1100m contact height, climbing. This is ~1000pt BELOW the 1200m
+  // ceiling, so the choice of ceiling is unambiguous. x is parked far off the
+  // spine so no prop can grab him this frame — the win check runs AFTER the grab
+  // logic, and a grab would snap his y down below the truck line. In a real run
+  // he reaches the truck flying through the gap, not atop a prop; the truck
+  // spans the full width, so the win check ignores x anyway.
+  const clearX = 100000;
+  const lowY = lowCeiling.truckHeightM * SCORING.pointsPerMetre - HAZARD.truckH / 2 - HAZARD.peepHitR;
+  const v = PHYSICS.orbitRate * PHYSICS.orbitRadius * PHYSICS.launchBoost;
+
+  // Under Low Ceiling: this IS the truck. Peep wins.
+  const won = step({ ...flyingAt(f, lowY), x: clearX, vy: v }, f, DT, false, BIG_VH, emptyZones, lowCeiling);
+  assert.equal(won.phase, 'won', 'at 1100m under Low Ceiling, Peep catches the truck');
+
+  // Under baseTuning (1200m): the same height is still 1000pt short. This is the
+  // mutation-kill — the OLD code read ESCAPE.truckHeightM and would have WON here
+  // too, making Low Ceiling inert. Peep must still be flying.
+  const flying = step({ ...flyingAt(f, lowY), x: clearX, vy: v }, f, DT, false, BIG_VH, emptyZones, baseTuning());
+  assert.equal(flying.phase, 'fly', 'at 1100m under the DEFAULT ceiling, the truck is not there yet');
 });
 
 test('the escape truck is PLACED, not rolled: no seed can generate a run past it', () => {

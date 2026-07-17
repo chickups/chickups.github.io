@@ -307,16 +307,22 @@ export function step(state, field, dt, pressed, viewportH, zones = EMPTY_ZONES, 
   if (desiredCamera > s.cameraY) s.cameraY = desiredCamera;
 
   // THE WIN — checked FIRST, and it is a third phase, not a death with a happy
-  // screen (spec D4). The escape truck is PLACED at ESCAPE.truckHeightM: a fixed,
+  // screen (spec D4). The escape truck is PLACED at `tuning.truckHeightM`: a fixed,
   // deterministic feature at a known height, never a member of zones.js's
   // wrapping hazard stream, so it can never be missed by generation. It spans the
   // full field width — reaching its height IS catching it, and there is nothing
   // to aim at and nothing to miss.
   //
+  // Read from `tuning`, NOT the raw ESCAPE token: the Low Ceiling daily modifier
+  // lowers the ceiling to 1100m through `RunTuning.truckHeightM`, and a bare
+  // `ESCAPE.truckHeightM` here would silently ignore it — the modifier would
+  // advertise "the truck leaves early" and change nothing. `baseTuning()` seeds
+  // it from ESCAPE.truckHeightM, so a plain run is unchanged.
+  //
   // Ordering matters: this runs before the fall and truck checks so that a frame
   // which both reaches the truck and grazes a hazard is a win. Peep is aboard;
   // the traffic is no longer his problem.
-  const escapeY = ESCAPE.truckHeightM * SCORING.pointsPerMetre;
+  const escapeY = tuning.truckHeightM * SCORING.pointsPerMetre;
   if (s.y + HAZARD.peepHitR >= escapeY - HAZARD.truckH / 2) {
     s.phase = 'won';
   }
