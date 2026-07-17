@@ -44,6 +44,10 @@ import {
   getSeenMilestones,
   checkMilestones,
   initMilestoneNotices,
+  getStreak,
+  setStreak,
+  getStreakClaimed,
+  setStreakClaimed,
 } from './storage.js';
 
 /** Reset the stub between tests so each test starts from a clean, empty store. */
@@ -154,4 +158,57 @@ test('idempotence: calling initMilestoneNotices() twice on a fresh install chang
 
   initMilestoneNotices();
   assert.equal(fakeStorage.getItem('chickup.msSeen'), '[]', 'still "[]", not re-derived or touched');
+});
+
+test('getStreak() is null when nothing has ever been stored', () => {
+  resetStorage();
+  assert.equal(getStreak(), null);
+});
+
+test('setStreak/getStreak round-trip exactly, floored to integers', () => {
+  resetStorage();
+  setStreak({ day: 20000.9, length: 3.2 });
+  assert.deepEqual(getStreak(), { day: 20000, length: 3 });
+});
+
+test('getStreak() treats untrusted localStorage as absent rather than throwing', () => {
+  // Exactly the discipline getSeenAchievements/getSeenMilestones/readStringArray follow:
+  // an older build, hand-edited JSON, or plain junk must fall back cleanly. This would
+  // fail if the `!Number.isFinite` guards (or the object/array checks) were removed.
+  resetStorage();
+  for (const raw of [
+    'not json at all',
+    '"a string"',
+    '42',
+    '[1,2]',
+    '{}',
+    '{"day":"x","length":2}',
+    '{"day":20000}',
+    '{"length":3}',
+    '{"day":null,"length":3}',
+  ]) {
+    fakeStorage.setItem('chickup.streak', raw);
+    assert.equal(getStreak(), null, `raw: ${raw}`);
+  }
+});
+
+test('getStreakClaimed() is -1 (never) when absent, distinct from a real day 0', () => {
+  resetStorage();
+  assert.equal(getStreakClaimed(), -1);
+  // Prove -1 really means "absent", not just "the default returned by readNumber for
+  // anything": day 0 itself must read back as 0, not get confused with "never".
+  setStreakClaimed(0);
+  assert.equal(getStreakClaimed(), 0);
+});
+
+test('setStreakClaimed/getStreakClaimed round-trip, floored to an integer day', () => {
+  resetStorage();
+  setStreakClaimed(20005.9);
+  assert.equal(getStreakClaimed(), 20005);
+});
+
+test('getStreakClaimed() falls back to -1 on corrupt storage rather than NaN or throwing', () => {
+  resetStorage();
+  fakeStorage.setItem('chickup.streakClaimed', 'not a number');
+  assert.equal(getStreakClaimed(), -1);
 });

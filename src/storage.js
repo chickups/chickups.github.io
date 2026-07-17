@@ -25,6 +25,13 @@ const K = {
   // Milestone rung INDICES the player has already been shown a reward for. Absence is
   // meaningful and distinct from `[]` — see `initMilestoneNotices`.
   msSeen: 'chickup.msSeen',
+  // The streak's last-played day and its length. `advanceStreak` in core/streak.js
+  // owns every transition; this is only where it is parked between launches.
+  streak: 'chickup.streak',
+  // The day number whose streak reward has already been taken. A rung pays ONCE:
+  // without this, closing and reopening the Daily screen would re-collect it.
+  // Mirrors the dailyBest pair — a day number in, a day number out.
+  streakClaimed: 'chickup.streakClaimed',
 };
 
 /**
@@ -399,4 +406,53 @@ export function setDailyBest(day, metres) {
     .filter((d) => day - d < 7)
     .reduce((acc, d) => { acc[String(d)] = map[String(d)]; return acc; }, /** @type {Record<string, number>} */ ({}));
   write(K.dailyBest, JSON.stringify(kept));
+}
+
+/**
+ * The stored streak, or `null` if there has never been one.
+ *
+ * Validated the way `getSeenAchievements` validates its list: localStorage is
+ * untrusted, and an older build, hand-edited JSON, or plain junk must fall back
+ * cleanly rather than throw. Anything that is not `{day:number, length:number}`
+ * with two finite numbers reads as "no streak", which `advanceStreak` then
+ * treats as a first-ever play.
+ *
+ * @returns {import('./core/streak.js').StreakState|null}
+ */
+export function getStreak() {
+  try {
+    const raw = localStorage.getItem(K.streak);
+    if (!raw) return null;
+    const v = JSON.parse(raw);
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+    if (!Number.isFinite(v.day) || !Number.isFinite(v.length)) return null;
+    return { day: Number(v.day), length: Number(v.length) };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Park a streak. Takes whatever `advanceStreak` returned — no rules live here.
+ * @param {import('./core/streak.js').StreakState} state
+ */
+export function setStreak(state) {
+  write(K.streak, JSON.stringify({ day: Math.floor(state.day), length: Math.floor(state.length) }));
+}
+
+/**
+ * The day whose streak reward has already been collected, or -1 if none ever has.
+ * -1 rather than 0: day 0 is a real day (1 January 1970), so 0 cannot mean "never".
+ * @returns {number}
+ */
+export function getStreakClaimed() {
+  return readNumber(K.streakClaimed, -1);
+}
+
+/**
+ * Record that today's rung has been paid out.
+ * @param {number} day from `dayNumber()` in core/daily.js
+ */
+export function setStreakClaimed(day) {
+  write(K.streakClaimed, String(Math.floor(day)));
 }
