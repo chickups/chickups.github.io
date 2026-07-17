@@ -58,6 +58,7 @@ const PRECACHE = [
   './src/render/screens/settings.js',
   './src/render/screens/reward.js',
   './src/render/screens/daily.js',
+  './src/render/screens/race.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable-512.png',
