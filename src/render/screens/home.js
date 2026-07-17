@@ -78,12 +78,7 @@ export function homeScreen(go) {
         navButton('map', go, 'journey'),
         navButton('shirt', go, 'shop'),
         navButton('trophy', go, 'achievements'),
-        // Settings is designed but inert in slice 1.
-        el('div', {
-          width: px(TAP_MIN), height: px(TAP_MIN), borderRadius: '50%',
-          background: 'rgba(255,251,240,.92)', boxShadow: '0 3px 0 rgba(75,53,36,.12)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: '0.55',
-        }, icon('gear', 22, COLORS.ink)),
+        navButton('gear', go, 'settings'),
       ),
     ),
     el('div', { position: 'absolute', top: px(200), left: '50%', transform: 'translateX(-46%) scale(.62)' }, truck(120)),

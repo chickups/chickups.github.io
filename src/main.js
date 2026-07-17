@@ -12,6 +12,7 @@ import { oopsScreen } from './render/screens/oops.js';
 import { bestScreen } from './render/screens/best.js';
 import { shopScreen } from './render/screens/shop.js';
 import { achievementsScreen } from './render/screens/achievements.js';
+import { settingsScreen } from './render/screens/settings.js';
 
 const stage = /** @type {HTMLElement} */ (document.getElementById('stage'));
 installViewport(stage);
@@ -28,6 +29,7 @@ registerScreens(stage, {
   best: bestScreen,
   shop: shopScreen,
   achievements: achievementsScreen,
+  settings: settingsScreen,
 });
 
 go('splash');
