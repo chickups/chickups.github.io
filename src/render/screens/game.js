@@ -14,7 +14,12 @@ import { biomeAtY, biomeIndexAtY } from '../../core/biome.js';
 import { createRun, step, scoreOf, radiusOf } from '../../core/run.js';
 import { PHYSICS, SCORING, COLORS, PROPS, HAZARD, ZONES } from '../../core/tokens.js';
 import { makeInput } from '../../input.js';
-import { getBest, recordRun, getEquippedOutfit, setDailyBest } from '../../storage.js';
+import {
+  getBest, recordRun, getEquippedOutfit, setDailyBest,
+  getStats, getSeenAchievements, markAchievementsSeen,
+} from '../../storage.js';
+import { pendingUnlocks } from '../../core/achievements.js';
+import { toastAchievement } from '../toast.js';
 import { dayNumber, dailySeed } from '../../core/daily.js';
 import { viewportPoints } from '../../viewport.js';
 import { tap, medium } from '../../haptics.js';
@@ -297,6 +302,18 @@ export function gameScreen(go, arg) {
         biomeIndex: biomeIndexAtY(state.maxY),
       });
       if (daily) setDailyBest(day, metres);
+
+      // Read stats back only AFTER recordRun has written them — an achievement is a
+      // fact about the new totals, so asking any earlier tests the previous run.
+      // Marking seen immediately (not when the toast finishes) keeps this correct
+      // if the player leaves mid-animation: the toast is a courtesy, the record of
+      // having earned it is not.
+      const unlocked = pendingUnlocks(getStats(), getSeenAchievements());
+      if (unlocked.length > 0) {
+        markAchievementsSeen(unlocked.map((a) => a.key));
+        for (const a of unlocked) toastAchievement(a.name);
+      }
+
       const isBest = metres > best;
       go(isBest ? 'best' : 'oops', {
         score: metres,

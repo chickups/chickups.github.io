@@ -1,5 +1,6 @@
 // @ts-check
 import { DEFAULT_OUTFIT, outfitAt } from './core/shop.js';
+import { ACHIEVEMENTS, evaluate } from './core/achievements.js';
 
 const K = {
   best: 'chickup.best',
@@ -17,6 +18,9 @@ const K = {
   // Lifetime feathers ever earned. Deliberately separate from `feathers` (the
   // spendable balance): spending in the shop must not un-earn a feather achievement.
   statTotalFeathers: 'chickup.stat.totalFeathers',
+  // Achievement keys the player has already been shown a toast for. Absence is
+  // meaningful and distinct from `[]` — see `initAchievementNotices`.
+  achSeen: 'chickup.achSeen',
 };
 
 /**
@@ -198,6 +202,48 @@ export function recordRun({ metres, feathers, maxChain, biomeIndex }) {
   write(K.statMaxChain, String(Math.max(readNumber(K.statMaxChain, 0), Math.floor(maxChain) || 0)));
   const reached = Math.max(0, Math.floor(biomeIndex) + 1);
   write(K.statBiomesReached, String(Math.max(readNumber(K.statBiomesReached, 0), reached)));
+}
+
+/**
+ * Achievement keys already announced to the player. Filtered against the real
+ * table: a renamed or removed achievement left behind by an older build must not
+ * count as "announced" for a key that no longer exists.
+ * @returns {string[]}
+ */
+export function getSeenAchievements() {
+  const known = new Set(ACHIEVEMENTS.map((a) => a.key));
+  return readStringArray(K.achSeen).filter((k) => known.has(k));
+}
+
+/**
+ * Mark achievements as announced. Idempotent — re-marking is a no-op.
+ * @param {string[]} keys
+ */
+export function markAchievementsSeen(keys) {
+  const seen = getSeenAchievements();
+  const add = keys.filter((k) => !seen.includes(k));
+  if (add.length === 0) return;
+  writeStringArray(K.achSeen, [...seen, ...add]);
+}
+
+/**
+ * Decide what an existing player has "already been told", once, on first run of
+ * any build that has toasts.
+ *
+ * Achievements are derived from lifetime stats, so a player who earned five of
+ * them before this feature existed has five unannounced achievements the instant
+ * the code ships. Without this, their next run would fire a five-toast parade for
+ * things they did weeks ago. Backfilling everything currently earned makes the
+ * feature start from "you are up to date" and only ever announce genuinely new
+ * work.
+ *
+ * A fresh install backfills `[]` (no stats, nothing earned), so new players still
+ * get every toast. The absent-vs-empty distinction is the whole mechanism: `[]`
+ * means "backfilled, nothing was earned", absent means "never backfilled".
+ */
+export function initAchievementNotices() {
+  if (readString(K.achSeen) !== null) return;
+  writeStringArray(K.achSeen, evaluate(getStats()).filter((r) => r.done).map((r) => r.key));
 }
 
 /**

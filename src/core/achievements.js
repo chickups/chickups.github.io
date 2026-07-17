@@ -121,3 +121,30 @@ export function evaluate(stats) {
 export function earnedCount(stats) {
   return evaluate(stats).filter((r) => r.done).length;
 }
+
+/**
+ * Which achievements are earned but have not been announced yet.
+ *
+ * Achievements have no unlock event: `evaluate` re-derives them from stats every
+ * time, so "earned" is a fact about the present, not a moment in the past. The
+ * moment is reconstructed by remembering which keys the player has already been
+ * told about, and diffing. That makes announcing idempotent — the caller can ask
+ * as often as it likes and only ever gets what it has not shown.
+ *
+ * Results come back in {@link ACHIEVEMENTS} order, never in `seen`'s order or a
+ * Set's: the announcement order is data, not a side effect of how the caller's
+ * storage happened to serialise. `seen` is untrusted (localStorage), so anything
+ * that is not an array of strings is read as "nothing announced yet".
+ *
+ * @param {unknown} stats
+ * @param {unknown} seen keys already announced
+ * @returns {{key:string, name:string, hint:string}[]}
+ */
+export function pendingUnlocks(stats, seen) {
+  const announced = new Set(
+    Array.isArray(seen) ? seen.filter((k) => typeof k === 'string') : [],
+  );
+  return evaluate(stats)
+    .filter((r) => r.done && !announced.has(r.key))
+    .map(({ key, name, hint }) => ({ key, name, hint }));
+}

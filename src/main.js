@@ -1,6 +1,8 @@
 // @ts-check
 import { installViewport } from './viewport.js';
 import { installStyles } from './render/styles.js';
+import { installToasts } from './render/toast.js';
+import { initAchievementNotices } from './storage.js';
 import { registerScreens, go } from './render/screens/router.js';
 import { splashScreen } from './render/screens/splash.js';
 import { introScreen } from './render/screens/intro.js';
@@ -17,6 +19,10 @@ import { settingsScreen } from './render/screens/settings.js';
 const stage = /** @type {HTMLElement} */ (document.getElementById('stage'));
 installViewport(stage);
 installStyles();
+installToasts(stage);
+// Must run before the first run can end: it decides what this player has already
+// been told, and only an untouched install may be told everything.
+initAchievementNotices();
 
 registerScreens(stage, {
   splash: splashScreen,
