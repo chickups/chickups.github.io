@@ -2,6 +2,7 @@
 import { installViewport } from './viewport.js';
 import { installStyles, setReducedMotion } from './render/styles.js';
 import { installToasts } from './render/toast.js';
+import { applyContrast } from './render/contrast.js';
 import { initAchievementNotices, initMilestoneNotices, getSetting } from './storage.js';
 import { registerScreens, go } from './render/screens/router.js';
 import { splashScreen } from './render/screens/splash.js';
@@ -36,6 +37,9 @@ installToasts(stage);
 // been told, and only an untouched install may be told everything.
 initAchievementNotices();
 initMilestoneNotices();
+// Before the first screen mounts: a player who turned this on last session must
+// never see one un-styled frame of the game they turned it on for.
+applyContrast(getSetting('contrast'));
 
 registerScreens(stage, {
   splash: splashScreen,

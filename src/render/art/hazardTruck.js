@@ -1,6 +1,7 @@
 // @ts-check
 import { el, px } from '../el.js';
 import { COLORS } from '../../core/tokens.js';
+import { isHighContrast } from '../contrast.js';
 
 /** COLORS.ink as decimal RGB, for shadow/opacity compositing without new colour literals. */
 const INK_RGB = '75,53,36';
@@ -34,6 +35,13 @@ export function hazardTruck(w, h = w * (64 / 130), dir = 1, animate = true, tell
   const W = w;
   const H = h;
 
+  // High Contrast (doc §07): the hazard gets a hard ink edge and a solid red
+  // stripe, so it reads as DANGER by shape and value, not by hue alone. Read at
+  // build time — game.js rebuilds a truck's art on its tell edge anyway, and
+  // Settings is only reachable from home/pause, both of which rebuild the game
+  // screen on the way back in.
+  const hc = isHighContrast();
+
   const wheel = (x) =>
     el(
       'div',
@@ -54,6 +62,10 @@ export function hazardTruck(w, h = w * (64 / 130), dir = 1, animate = true, tell
     'div',
     {
       position: 'relative', width: px(W), height: px(H),
+      outline: hc ? `${px(3)} solid ${COLORS.ink}` : 'none',
+      outlineOffset: px(-1),
+      borderRadius: px(W * 0.03),
+      boxShadow: hc ? `0 0 0 ${px(2)} ${COLORS.red}` : 'none',
     },
     // The tell glow sits OUTSIDE the scaleX(dir) wrapper so it never flips with
     // the truck. Core decides WHEN (truckTelling), render decides it is a red
@@ -99,8 +111,10 @@ export function hazardTruck(w, h = w * (64 / 130), dir = 1, animate = true, tell
         }),
         // hazard stripe along the lower edge
         el('div', {
-          position: 'absolute', left: '4%', right: '4%', bottom: '10%', height: px(H * 0.09),
-          background: `repeating-linear-gradient(45deg, ${COLORS.goldD} 0px, ${COLORS.goldD} ${px(H * 0.05)}, ${COLORS.ink} ${px(H * 0.05)}, ${COLORS.ink} ${px(H * 0.1)})`,
+          position: 'absolute', left: '4%', right: '4%', bottom: '10%', height: px(H * (hc ? 0.16 : 0.09)),
+          background: hc
+            ? COLORS.red
+            : `repeating-linear-gradient(45deg, ${COLORS.goldD} 0px, ${COLORS.goldD} ${px(H * 0.05)}, ${COLORS.ink} ${px(H * 0.05)}, ${COLORS.ink} ${px(H * 0.1)})`,
           borderRadius: px(H * 0.02),
         }),
       ),

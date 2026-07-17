@@ -132,6 +132,18 @@ const CSS = `${KEYFRAMES}
 ${motionOffRules('')}
 }
 ${motionOffRules('[data-motion="reduce"]')}
+/* Doc §07 High Contrast. Keyed off a data attribute rather than per-element
+   rules: every art module styles inline, and a stylesheet cannot beat an inline
+   style without !important on every single property. A filter on the stage lifts
+   the whole scene at once, and the props/HUD get a hard ink edge so shape reads
+   before colour does — the point of the setting is that colour alone is never
+   the signal. See render/contrast.js. */
+:root[data-hc="1"] #stage {
+  filter: contrast(1.28) saturate(1.35);
+}
+:root[data-hc="1"] #stage * {
+  text-shadow: none !important;
+}
 `;
 
 /**
