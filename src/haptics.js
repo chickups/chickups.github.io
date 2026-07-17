@@ -24,3 +24,6 @@ export const medium = () => buzz(16);
 
 /** New best / reward unlock — success. */
 export const success = () => buzz([12, 40, 12]);
+
+/** Collision — rigid. §12. Wired into the run-end path when deathBy === 'truck'. */
+export const rigid = () => buzz([18, 24]);
