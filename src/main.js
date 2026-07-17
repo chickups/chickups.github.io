@@ -2,7 +2,7 @@
 import { installViewport } from './viewport.js';
 import { installStyles } from './render/styles.js';
 import { installToasts } from './render/toast.js';
-import { initAchievementNotices } from './storage.js';
+import { initAchievementNotices, initMilestoneNotices } from './storage.js';
 import { registerScreens, go } from './render/screens/router.js';
 import { splashScreen } from './render/screens/splash.js';
 import { introScreen } from './render/screens/intro.js';
@@ -25,9 +25,10 @@ const stage = /** @type {HTMLElement} */ (document.getElementById('stage'));
 installViewport(stage);
 installStyles();
 installToasts(stage);
-// Must run before the first run can end: it decides what this player has already
+// Must run before the first run can end: they decide what this player has already
 // been told, and only an untouched install may be told everything.
 initAchievementNotices();
+initMilestoneNotices();
 
 registerScreens(stage, {
   splash: splashScreen,
