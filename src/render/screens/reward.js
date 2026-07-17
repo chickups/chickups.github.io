@@ -6,6 +6,7 @@ import { primaryButton, secondaryButton } from '../ui.js';
 import { COLORS } from '../../core/tokens.js';
 import { setEquippedOutfit } from '../../storage.js';
 import { success } from '../../haptics.js';
+import { chime } from '../../sound.js';
 
 /**
  * §05's Reward Unlocked! screen, and the interstitial gate that decides when it shows.
@@ -101,8 +102,11 @@ function rewardLabel(grant) {
  * @returns {HTMLElement}
  */
 export function rewardScreen(go, arg) {
-  // §12: reward unlock is a success haptic, same as a new best.
+  // §12: reward unlock is a success haptic, same as a new best, plus the reward
+  // chime. Both are gated internally (haptics/sound settings), so this is silent
+  // for a player who has turned either off.
   success();
+  chime();
 
   const { grant } = arg;
   const onwards = () => go(arg.then, arg.thenArg);
