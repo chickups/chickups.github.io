@@ -3,14 +3,29 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { OUTFITS, DEFAULT_OUTFIT, outfitAt, canAfford, purchase } from './shop.js';
 
-test('OUTFITS is a frozen array of exactly the three buyable outfits, ascending cost', () => {
+test('OUTFITS is a frozen array of exactly the five buyable outfits, ascending cost', () => {
   assert.ok(Object.isFrozen(OUTFITS));
-  assert.equal(OUTFITS.length, 3);
+  assert.equal(OUTFITS.length, 5);
   const keys = OUTFITS.map((o) => o.key).sort();
-  assert.deepEqual(keys, ['cape', 'cowboy', 'goggles']);
+  assert.deepEqual(keys, ['cape', 'cowboy', 'crown', 'goggles', 'scarf']);
   for (let i = 1; i < OUTFITS.length; i++) {
     assert.ok(OUTFITS[i].cost > OUTFITS[i - 1].cost, `outfit ${i} must cost more than the previous one`);
   }
+});
+
+test('scarf and crown are buyable, ascending, above cape', () => {
+  const scarf = outfitAt('scarf');
+  const crown = outfitAt('crown');
+  assert.ok(scarf);
+  assert.ok(crown);
+  assert.equal(scarf.cost, 1200);
+  assert.equal(crown.cost, 2000);
+  // ascending cost order preserved across the whole table:
+  const costs = OUTFITS.map((o) => o.cost);
+  assert.deepEqual(costs, [...costs].sort((a, b) => a - b));
+  // purchase works when affordable:
+  const r = purchase({ feathers: 1200, owned: [] }, 'scarf');
+  assert.ok(r.ok && r.feathers === 0 && r.owned.includes('scarf'));
 });
 
 test('DEFAULT_OUTFIT is none and is never in the buyable catalogue', () => {
@@ -112,7 +127,7 @@ test('the three rejection reasons are distinct strings', () => {
 
 test('purchase catalogue keys match the outfits peep.js art actually supports', () => {
   // src/render/art/peep.js buildOutfit() only renders these exact keys.
-  const supportedByArt = ['cowboy', 'goggles', 'cape'];
+  const supportedByArt = ['cowboy', 'goggles', 'cape', 'scarf', 'crown'];
   const catalogueKeys = OUTFITS.map((o) => o.key).sort();
   assert.deepEqual(catalogueKeys, [...supportedByArt].sort());
 });

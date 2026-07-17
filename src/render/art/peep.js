@@ -2,7 +2,7 @@
 import { el, px, svg } from '../el.js';
 
 /** @typedef {'idle'|'run'|'launch'|'fly'|'celebrate'|'sad'|'frightened'} PeepPose */
-/** @typedef {'none'|'cowboy'|'goggles'|'cape'} PeepOutfit */
+/** @typedef {'none'|'cowboy'|'goggles'|'cape'|'scarf'|'crown'} PeepOutfit */
 
 const C = {
   body: '#FFCE3A',
@@ -375,6 +375,48 @@ function buildOutfit(outfit, S) {
       background: 'linear-gradient(#FF5A4D,#D63A2E)', borderRadius: '40% 40% 20% 20%',
       zIndex: '-1', clipPath: 'polygon(0 0,100% 0,88% 100%,50% 82%,12% 100%)',
     });
+  }
+  if (outfit === 'scarf') {
+    // Peep has no separate neck — head and body are one round blob — so the band sits
+    // in the gap between the bottom of the eyes (~0.28S + 0.31S tall ≈ 0.59S) and the
+    // top of the beak (beakY = 0.68S in buildFace): a strip from 0.56S to 0.68S reads
+    // as "wrapped under the chin" without covering either feature.
+    return el(
+      'div',
+      { position: 'absolute', inset: '0px', zIndex: '5' },
+      // neck band
+      el('div', {
+        position: 'absolute', left: px(S * 0.28), top: px(S * 0.56),
+        width: px(S * 0.44), height: px(S * 0.12), background: 'linear-gradient(#F0503F,#B22)',
+        borderRadius: px(S * 0.06),
+      }),
+      // trailing tail, flicking out to the side like it's caught in the wind
+      el('div', {
+        position: 'absolute', left: px(S * 0.58), top: px(S * 0.62),
+        width: px(S * 0.3), height: px(S * 0.16), background: 'linear-gradient(#E23B2E,#B22)',
+        borderRadius: '10% 40% 40% 10%', transform: 'rotate(10deg)', zIndex: '-1',
+      }),
+    );
+  }
+  if (outfit === 'crown') {
+    // Same footprint as the cowboy hat (which spans roughly -0.06S to 0.11S) so it sits
+    // directly on top of Peep's head, just above the body (body top is 0.16S).
+    return el(
+      'div',
+      { position: 'absolute', inset: '0px', zIndex: '6' },
+      // base band
+      el('div', {
+        position: 'absolute', left: px(S * 0.33), top: px(S * 0.06),
+        width: px(S * 0.34), height: px(S * 0.05), background: '#E5A93C', borderRadius: px(S * 0.02),
+      }),
+      // zigzag crown top
+      el('div', {
+        position: 'absolute', left: px(S * 0.34), top: px(S * -0.04),
+        width: px(S * 0.32), height: px(S * 0.14), background: 'linear-gradient(#FFD64A,#E5A93C)',
+        clipPath: 'polygon(0 100%,0 40%,20% 70%,50% 0,80% 70%,100% 40%,100% 100%)',
+        filter: 'drop-shadow(0 1px 0 rgba(75,53,36,.35))',
+      }),
+    );
   }
   return null;
 }

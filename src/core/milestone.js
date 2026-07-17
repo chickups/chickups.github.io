@@ -51,8 +51,9 @@ export function passedMilestones(totalFeathers) {
  *
  * This is why a milestone can never fire "Reward Unlocked!" for a hat the player already
  * has — the grant is defined as the cheapest thing they lack, so "already owned" is
- * unreachable by construction rather than by a check. With only three outfits, a fourth
- * rung would have nothing to give; that case pays {@link ALL_OWNED_BONUS} instead.
+ * unreachable by construction rather than by a check. Once every outfit in
+ * {@link OUTFITS} (currently five) is owned, a rung has nothing left to give; that case
+ * pays {@link ALL_OWNED_BONUS} instead.
  *
  * Walks {@link OUTFITS} in table order and takes the first unowned. That is "cheapest"
  * only because OUTFITS ascends by cost — asserted by a test rather than re-sorted here.

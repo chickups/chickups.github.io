@@ -5,11 +5,11 @@
  * multiplier on banked feathers) and have had nothing to spend on since slice 1. This
  * module holds the catalogue and the pure purchase rule; `render/` draws the screen.
  *
- * The three keys below are exactly the outfits `src/render/art/peep.js`'s `buildOutfit`
- * knows how to draw ('cowboy', 'goggles', 'cape'). They are copied here rather than
- * imported, because `core/` may not import from `render/` (the Swift-portability rule) —
- * that is intentional, not an oversight, and if the art ever adds or renames an outfit
- * this table must be updated by hand to match.
+ * The five keys below are exactly the outfits `src/render/art/peep.js`'s `buildOutfit`
+ * knows how to draw ('cowboy', 'goggles', 'cape', 'scarf', 'crown'). They are copied here
+ * rather than imported, because `core/` may not import from `render/` (the
+ * Swift-portability rule) — that is intentional, not an oversight, and if the art ever
+ * adds or renames an outfit this table must be updated by hand to match.
  *
  * Cost ramp and calibration: a good run banks roughly 40-120 feathers (say ~70-80 on
  * average once the chain multiplier, capped at x5, is in play). The ramp below is chosen
@@ -20,6 +20,15 @@
  *    coming back regularly but isn't grinding.
  *  - cape (700): roughly nine to ten runs of dedicated play — a real target, but still
  *    reachable within a single sitting's worth of runs, not a multi-day grind.
+ *  - scarf (1200): roughly sixteen runs — a longer-term goal aimed at a player who keeps
+ *    coming back across several sessions, past the point cape stopped being a stretch.
+ *  - crown (2000): roughly twenty-six to twenty-seven runs — the top of the ladder, a
+ *    genuine long-haul cosmetic for a player who has stuck with the game for a while.
+ *
+ * These two tiers also extend the milestone cheapest-unowned-outfit ladder (see
+ * `core/milestone.js`'s `grantFor`) automatically: it walks this table in order and hands
+ * out the first unowned entry, so adding rows here — as long as they stay ascending —
+ * is the entire change needed to keep milestone rewards flowing past `cape`.
  */
 
 /** @typedef {{key:string, name:string, cost:number}} Outfit */
@@ -35,7 +44,7 @@
  */
 
 /**
- * The three buyable outfits, ascending cost. Frozen: this is a content table, not a
+ * The five buyable outfits, ascending cost. Frozen: this is a content table, not a
  * tuning surface — see the module doc above for the cost reasoning.
  * @type {Outfit[]}
  */
@@ -43,6 +52,8 @@ export const OUTFITS = Object.freeze([
   Object.freeze({ key: 'cowboy', name: 'Cowboy Hat', cost: 120 }),
   Object.freeze({ key: 'goggles', name: 'Flight Goggles', cost: 300 }),
   Object.freeze({ key: 'cape', name: 'Hero Cape', cost: 700 }),
+  Object.freeze({ key: 'scarf', name: 'Racing Scarf', cost: 1200 }),
+  Object.freeze({ key: 'crown', name: 'Golden Crown', cost: 2000 }),
 ]);
 
 /**

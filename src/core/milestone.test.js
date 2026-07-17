@@ -47,6 +47,10 @@ test('grantFor gives the cheapest outfit the player does not own', () => {
   assert.deepEqual(grantFor(['cowboy', 'goggles']), { kind: 'outfit', outfitKey: 'cape', name: 'Hero Cape' });
   // Owning only the EXPENSIVE one still yields the cheapest unowned, not the next up.
   assert.deepEqual(grantFor(['cape']), { kind: 'outfit', outfitKey: 'cowboy', name: 'Cowboy Hat' });
+  // The ladder extends past cape automatically — scarf and crown are just more rows
+  // in OUTFITS, so grantFor walks into them the same way with no code change.
+  assert.deepEqual(grantFor(['cowboy', 'goggles', 'cape']), { kind: 'outfit', outfitKey: 'scarf', name: 'Racing Scarf' });
+  assert.deepEqual(grantFor(['cowboy', 'goggles', 'cape', 'scarf']), { kind: 'outfit', outfitKey: 'crown', name: 'Golden Crown' });
 });
 
 test('grantFor never names an outfit the player already owns (D7 by construction)', () => {
@@ -59,7 +63,7 @@ test('grantFor never names an outfit the player already owns (D7 by construction
 });
 
 test('grantFor pays feathers when every outfit is owned', () => {
-  assert.deepEqual(grantFor(['cowboy', 'goggles', 'cape']), { kind: 'feathers', amount: ALL_OWNED_BONUS });
+  assert.deepEqual(grantFor(['cowboy', 'goggles', 'cape', 'scarf', 'crown']), { kind: 'feathers', amount: ALL_OWNED_BONUS });
   assert.deepEqual(grantFor(OUTFITS.map((o) => o.key)), { kind: 'feathers', amount: ALL_OWNED_BONUS });
 });
 
