@@ -144,9 +144,38 @@ export const CAMERA = Object.freeze({
  * launch exactly like tires but at a scaled rate and radius.
  */
 export const PROPS = Object.freeze({
-  /** Upward speed a pad imparts, pt/s. Chosen so a pad out-climbs a tire launch:
-   *  rise = padBounce^2/(2*gravity) = 420^2/560 = 315pt vs a tire's 247pt. */
-  padBounce: 420,
+  /**
+   * Contact speed carries into the bounce (doc §13): a pad relaunches Peep at
+   * `padBounceScale` times the speed he arrived at, clamped into
+   * [padBounceMin, padBounceMax].
+   *
+   * THE CLAMP IS DERIVED, NOT ARBITRARY. DO NOT REMOVE IT.
+   *
+   * Unbounded, 1.4x DIVERGES. From the TUNING NOTE, rise = v^2 / (2*gravity) =
+   * v^2 / 560. A bounce to height h means falling back onto the next pad at
+   * v = sqrt(560h) and relaunching at 1.4v, which reaches 1.96h. Every
+   * pad-to-pad cycle therefore DOUBLES the height: 315 -> 617 -> 1210 -> 2371pt.
+   * Four bounces and Peep exits the field in a single frame.
+   *
+   * padBounceMin = 340: a pad must always clear the next rung or it reads as
+   * broken. Clearing FIELD.gapMax (200pt) needs sqrt(560 * 200) = 335 pt/s; 340
+   * gives a 206pt rise, just over one gap. Without a floor, brushing a pad at
+   * the apex of a fall (contact speed ~0) would produce a bounce of ~0.
+   *
+   * padBounceMax = 480: a 411pt rise, ~two gaps — generous but readable, and
+   * above the old flat 420 (315pt), so a fast fall IS genuinely rewarded.
+   * Critically it is a FIXED POINT: falling from 411pt lands at 480, 480 * 1.4 =
+   * 672, which clamps back to 480. The series terminates instead of doubling.
+   *
+   * The 1.4x therefore governs contact speeds of 243..343 pt/s and clamps
+   * outside that band. These three are the first thing to revisit in playtesting.
+   * A guard test lives in run.test.js ('pad bounces CONVERGE to padBounceMax').
+   */
+  padBounceScale: 1.4,
+  /** pt/s. Floor. See padBounceScale above for the derivation — sqrt(560*200)=335. */
+  padBounceMin: 340,
+  /** pt/s. Ceiling, and the series' fixed point. See padBounceScale above. */
+  padBounceMax: 480,
   /** pt. Contact radius of a pad. Generous: missing a pad is "no penalty" (doc §13). */
   padRadius: 46,
   /** Gears spin the opposite way to tires, which reverses the launch arc. */

@@ -3,7 +3,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRun, step, scoreOf, radiusOf, rateOf } from './run.js';
 import { makeField } from './field.js';
-import { PHYSICS, SCORING, PROPS, ZONES, HAZARD } from './tokens.js';
+import { PHYSICS, SCORING, PROPS, ZONES, HAZARD, FIELD } from './tokens.js';
+import { baseTuning } from './modifier.js';
 
 const VH = 852;
 const DT = 1 / 60;
@@ -228,19 +229,22 @@ test('a pad bounce sets vy up, preserves vx, and leaves phase fly with no input'
   s = { ...s, phase: 'fly', x: pad.x, y: pad.y, vx: 37, vy: -5, lockWheel: -1, lockPad: -1, wasPressed: false };
   s = step(s, f, DT, false, VH);
   assert.equal(s.phase, 'fly', 'a pad bounce must not attach');
-  assert.equal(s.vy, PROPS.padBounce);
+  assert.equal(
+    s.vy,
+    Math.min(PROPS.padBounceMax, Math.max(PROPS.padBounceMin, Math.abs(-5) * PROPS.padBounceScale)),
+  );
   assert.equal(s.vx, 37, 'a pad must not touch horizontal velocity');
   assert.equal(s.lastWheelY, pad.y, 'a pad still counts as upward progress');
 });
 
-test('a pad does not increment chain, mult, or feathers', () => {
+test('a pad is a chain link: it builds chain, mult and feathers exactly like a grab (spec D6)', () => {
   const f = makeField(1);
   const { pad } = findPad(f);
   let s = createRun(f, VH);
   s = {
     ...s,
     phase: 'fly',
-    chain: 4,
+    chain: 2,
     mult: 2,
     feathers: 9,
     x: pad.x,
@@ -252,9 +256,9 @@ test('a pad does not increment chain, mult, or feathers', () => {
     wasPressed: false,
   };
   s = step(s, f, DT, false, VH);
-  assert.equal(s.chain, 4, 'a pad must not build the chain');
-  assert.equal(s.mult, 2, 'a pad must not build the multiplier');
-  assert.equal(s.feathers, 9, 'a pad grants no feathers');
+  assert.equal(s.chain, 3, 'a pad must build the chain, same as a grab');
+  assert.equal(s.mult, 3, 'the chain crossed a chainPerMult boundary (3), so mult must step');
+  assert.equal(s.feathers, 12, 'feathers += mult (the new mult, 3), same rule as a grab');
 });
 
 test('a pad in lockPad does not re-fire every frame while still in contact', () => {
@@ -264,7 +268,10 @@ test('a pad in lockPad does not re-fire every frame while still in contact', () 
   s = { ...s, phase: 'fly', x: pad.x, y: pad.y, vx: 0, vy: -5, lockWheel: -1, lockPad: -1, wasPressed: false };
   s = step(s, f, DT, false, VH);
   assert.equal(s.lockPad, padIdx, 'the pad must lock itself out on bounce');
-  assert.equal(s.vy, PROPS.padBounce);
+  assert.equal(
+    s.vy,
+    Math.min(PROPS.padBounceMax, Math.max(PROPS.padBounceMin, Math.abs(-5) * PROPS.padBounceScale)),
+  );
   // Still sitting inside the pad's radius next frame: must not bounce again.
   const vyAfterGravity = s.vy - PHYSICS.gravity * DT;
   s = { ...s, x: pad.x, y: pad.y };
@@ -505,4 +512,176 @@ test('without a zones argument, step behaves exactly as before (no trucks/updraf
   const withoutZones = step(s, f, DT, false, VH);
   assert.equal(withoutZones.phase, 'fly');
   assert.ok(Math.abs(withoutZones.vy - (0 - PHYSICS.gravity * DT)) < 1e-9);
+});
+
+// --- pads: 1.4x contact speed, bounded ------------------------------------
+
+/** A viewport tall enough that `cameraY` can never catch a falling Peep: the
+ *  pad-tower tests below drop him hundreds of points on purpose, and the real
+ *  852pt viewport would kill him for it before the second bounce. */
+const BIG_VH = 1e6;
+
+/**
+ * A stub Field holding exactly one pad at (0, padY) and no reachable spine
+ * props. `step` calls `field.propAt(0)` via createRun and `field.padAt` for the
+ * lock release, so both must answer; the props sit far below every query range
+ * so `propsInRange` never offers a grab and the pad is the only thing Peep can
+ * touch.
+ * @param {number} padY
+ * @returns {import('./field.js').Field}
+ */
+function padTower(padY) {
+  const far = { x: 0, y: -1e9, kind: /** @type {'tire'} */ ('tire') };
+  const pad = { x: 0, y: padY };
+  return {
+    propAt: () => far,
+    propsInRange: () => [],
+    padAt: (i) => (i === 0 ? pad : null),
+    padsInRange: (lo, hi) => (padY >= lo && padY <= hi ? [{ index: 0, pad }] : []),
+    wheelAt: () => far,
+    wheelsInRange: () => [],
+  };
+}
+
+/**
+ * Drop Peep from `dropH` above the pad and collect the upward speed of every
+ * bounce over `frames` frames. A bounce is the frame where vy flips from
+ * non-positive to positive.
+ * @param {number} dropH
+ * @param {number} frames
+ * @param {import('./modifier.js').RunTuning} [tuning]
+ * @returns {number[]}
+ */
+function bounceSpeeds(dropH, frames, tuning) {
+  const padY = 0;
+  const f = padTower(padY);
+  let s = {
+    ...createRun(f, BIG_VH),
+    phase: /** @type {'fly'} */ ('fly'),
+    x: 0,
+    y: padY + dropH,
+    vx: 0,
+    vy: 0,
+    startY: 0,
+    maxY: padY + dropH,
+    cameraY: -1e9,
+    lastWheelY: -1e9,
+    lockWheel: -1,
+    lockPad: -1,
+  };
+  const out = [];
+  for (let i = 0; i < frames; i++) {
+    const prev = s.vy;
+    s = tuning ? step(s, f, DT, false, BIG_VH, undefined, tuning) : step(s, f, DT, false, BIG_VH);
+    if (prev <= 0 && s.vy > 0) out.push(s.vy);
+  }
+  return out;
+}
+
+test('pad bounces CONVERGE to padBounceMax rather than doubling every cycle', () => {
+  // Unbounded 1.4x diverges: rise = v^2/560, so a bounce to height h means
+  // falling back at sqrt(560h) and relaunching at 1.4*sqrt(560h), i.e. 1.96h.
+  // Four cycles and Peep leaves the field in one frame. This test is the only
+  // thing standing between a future "this clamp looks arbitrary" and that bug.
+  const speeds = bounceSpeeds(100, 60 * 30);
+  assert.ok(speeds.length >= 6, `expected several bounces, got ${speeds.length}`);
+  assert.ok(
+    speeds.every((v) => v <= PROPS.padBounceMax + 1e-9),
+    `no bounce may exceed padBounceMax (${PROPS.padBounceMax}); got ${JSON.stringify(speeds)}`,
+  );
+  assert.ok(
+    speeds.every((v) => v >= PROPS.padBounceMin - 1e-9),
+    `no bounce may fall below padBounceMin (${PROPS.padBounceMin}); got ${JSON.stringify(speeds)}`,
+  );
+  const tail = speeds.slice(-3);
+  assert.deepEqual(
+    tail,
+    [PROPS.padBounceMax, PROPS.padBounceMax, PROPS.padBounceMax],
+    `the series must settle ON the cap, not merely under it; tail was ${JSON.stringify(tail)}`,
+  );
+});
+
+test('a fast fall bounces higher than a slow one, inside the governed band', () => {
+  // The 1.4x only governs contact speeds of 243..343 pt/s; outside that band the
+  // clamps take over and the two drops would read identically. Pick two drops
+  // whose contact speeds land inside it: rise = v^2/560, so 110pt -> ~248 and
+  // 200pt -> ~335.
+  const slow = bounceSpeeds(110, 60 * 4)[0];
+  const fast = bounceSpeeds(200, 60 * 4)[0];
+  assert.ok(fast > slow, `a faster fall must bounce higher: fast ${fast} vs slow ${slow}`);
+});
+
+test('brushing a pad at the apex of a fall still clears the next rung', () => {
+  // Contact speed ~0 with no floor gives a bounce of ~0 and the pad reads as
+  // broken. padBounceMin exists exactly for this: clearing gapMax (200pt) needs
+  // sqrt(560*200) = 335 pt/s.
+  const first = bounceSpeeds(1, 60 * 4)[0];
+  assert.equal(first, PROPS.padBounceMin);
+  const rise = (first * first) / (2 * PHYSICS.gravity);
+  assert.ok(rise > FIELD.gapMax, `a pad must always clear gapMax: rise ${rise} vs gap ${FIELD.gapMax}`);
+});
+
+test('padBounceMod (Bouncy Hay) is applied AFTER the clamp, not swallowed by it', () => {
+  // Same fall, base tuning vs Bouncy Hay (padBounceMod: 1.3). If the mod were
+  // applied inside the clamp, padBounceMax would eat the difference and these
+  // would read identically — that is exactly the bug the controller note warns
+  // against.
+  const base = bounceSpeeds(200, 60 * 4, baseTuning())[0];
+  const bouncy = bounceSpeeds(200, 60 * 4, { ...baseTuning(), padBounceMod: 1.3 })[0];
+  assert.ok(bouncy > base, `Bouncy Hay must bounce higher than base off the same fall: bouncy ${bouncy} vs base ${base}`);
+  assert.ok(
+    Math.abs(bouncy - base * 1.3) < 1e-9,
+    `the mod must multiply the (already-clamped) base bounce exactly: expected ${base * 1.3}, got ${bouncy}`,
+  );
+});
+
+test('the bounce series still converges with padBounceMod: 1.3 (fixed point moves to padBounceMax * 1.3)', () => {
+  const tuning = { ...baseTuning(), padBounceMod: 1.3 };
+  const speeds = bounceSpeeds(100, 60 * 30, tuning);
+  assert.ok(speeds.length >= 6, `expected several bounces, got ${speeds.length}`);
+  const fixedPoint = PROPS.padBounceMax * 1.3;
+  assert.ok(
+    speeds.every((v) => v <= fixedPoint + 1e-9),
+    `no bounce may exceed the modified fixed point (${fixedPoint}); got ${JSON.stringify(speeds)}`,
+  );
+  const tail = speeds.slice(-3);
+  assert.deepEqual(
+    tail,
+    [fixedPoint, fixedPoint, fixedPoint],
+    `the series must settle on the modified fixed point, not merely under it; tail was ${JSON.stringify(tail)}`,
+  );
+});
+
+test('a pad is a chain link: it steps chain, mult and feathers exactly like a grab', () => {
+  const padY = 0;
+  const f = padTower(padY);
+  let s = {
+    ...createRun(f, BIG_VH),
+    phase: /** @type {'fly'} */ ('fly'),
+    x: 0,
+    y: padY + 100,
+    vx: 0,
+    vy: 0,
+    startY: 0,
+    maxY: padY + 100,
+    cameraY: -1e9,
+    lastWheelY: -1e9,
+    lockWheel: -1,
+    lockPad: -1,
+  };
+  const seen = [];
+  for (let i = 0; i < 60 * 30; i++) {
+    const prev = s.vy;
+    s = step(s, f, DT, false, BIG_VH);
+    if (prev <= 0 && s.vy > 0) seen.push({ chain: s.chain, mult: s.mult, feathers: s.feathers });
+    if (seen.length >= 3) break;
+  }
+  assert.deepEqual(seen.map((e) => e.chain), [1, 2, 3], 'each pad is one chain link');
+  // SCORING.chainPerMult is 3: the third link steps the multiplier, same rule as
+  // a grab, same SCORING.multMax cap. Spec D6 — NOT a separate "x2 pad streak",
+  // which would downgrade a player already at x4.
+  assert.deepEqual(seen.map((e) => e.mult), [1, 1, 2]);
+  // feathers += mult at each link, with mult still 1 on the third (it steps
+  // after banking is not the rule — the grab path steps mult first, then banks).
+  assert.deepEqual(seen.map((e) => e.feathers), [1, 2, 4]);
 });

@@ -222,14 +222,35 @@ export function step(state, field, dt, pressed, viewportH, zones = EMPTY_ZONES, 
       );
 
     if (padHit) {
-      // No tap, no attach: a pad bypasses the hold-release verb entirely.
-      // vx is untouched, so it grants no steering.
-      // tuning.padBounceMod is the MODIFIER's dial (Bouncy Hay = 1.3), 1.0 at base.
-      // It is NOT `PROPS.padBounceScale`, the contact-speed physics factor — the two
-      // share a name from the interface contract and multiply independently.
-      s.vy = PROPS.padBounce * tuning.padBounceMod;
+      // No tap, no attach: a pad is automatic. `vx` is untouched, so it grants
+      // no steering.
+      //
+      // Contact speed carries into the bounce (doc §13) — see PROPS.padBounceScale
+      // in tokens.js for why the clamp is mandatory and where both bounds come
+      // from. Short version: unbounded, this doubles Peep's height every
+      // pad-to-pad cycle.
+      //
+      // `tuning.padBounceMod` is a DIFFERENT quantity: the Daily Run's Bouncy Hay
+      // dial (1.0 at base, 1.3 on Bouncy Hay), not this contact factor. It is
+      // applied AFTER the clamp deliberately — inside it, padBounceMax would eat
+      // the 1.3 on exactly the fast falls Bouncy Hay exists to reward. Applied
+      // here, the fixed point moves to 480 * mod and the series still terminates.
+      s.vy = Math.min(
+        PROPS.padBounceMax,
+        Math.max(PROPS.padBounceMin, Math.abs(s.vy) * PROPS.padBounceScale),
+      ) * tuning.padBounceMod;
       s.lastWheelY = padHit.pad.y;
       s.lockPad = padHit.index;
+      // Spec D6: a pad is a CHAIN LINK, exactly like a grab — same counter, same
+      // chainPerMult rule, same multMax cap. The doc's literal "x2 pad streak"
+      // was rejected because it would DOWNGRADE a player already at x4 under the
+      // rule below, and because "without touching ground" is meaningless in a
+      // game with no ground.
+      s.chain += 1;
+      if (s.chain % SCORING.chainPerMult === 0) {
+        s.mult = Math.min(SCORING.multMax, s.mult + 1);
+      }
+      s.feathers += s.mult;
     } else {
       // Touching an orbitable prop's band attaches automatically — the player
       // times the launch, never the catch. Each candidate carries its own
