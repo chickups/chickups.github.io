@@ -41,6 +41,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   getStats,
+  recordRun,
   getSeenMilestones,
   checkMilestones,
   initMilestoneNotices,
@@ -276,6 +277,14 @@ test('getSetting() falls back to defaults when the whole settings blob is junk, 
     assert.equal(getSetting('haptics'), true, `raw: ${raw}`);
     assert.equal(getSetting('motion'), false, `raw: ${raw}`);
   }
+});
+
+test('recordRun increments wins only when won is true', () => {
+  resetStorage();
+  recordRun({ metres: 1200, feathers: 10, maxChain: 1, biomeIndex: 5, won: true });
+  assert.equal(getStats().wins, 1);
+  recordRun({ metres: 800, feathers: 10, maxChain: 1, biomeIndex: 4, won: false });
+  assert.equal(getStats().wins, 1); // a loss must NOT increment — kills "always ++"
 });
 
 test('getSetting() filters a mixed blob: an unknown key is ignored, a non-boolean value falls back to default', () => {

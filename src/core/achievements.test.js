@@ -4,9 +4,9 @@ import assert from 'node:assert/strict';
 import { ACHIEVEMENTS, evaluate, earnedCount, pendingUnlocks } from './achievements.js';
 import { BIOMES } from './biome.js';
 
-test('ACHIEVEMENTS is a frozen array of 6-10 entries with unique keys', () => {
+test('ACHIEVEMENTS is a frozen array of 6-14 entries with unique keys', () => {
   assert.ok(Object.isFrozen(ACHIEVEMENTS));
-  assert.ok(ACHIEVEMENTS.length >= 6 && ACHIEVEMENTS.length <= 10, `expected 6-10, got ${ACHIEVEMENTS.length}`);
+  assert.ok(ACHIEVEMENTS.length >= 6 && ACHIEVEMENTS.length <= 14, `expected 6-14, got ${ACHIEVEMENTS.length}`);
   const keys = ACHIEVEMENTS.map((a) => a.key);
   assert.equal(new Set(keys).size, keys.length, 'achievement keys must be unique');
   for (const a of ACHIEVEMENTS) {
@@ -48,6 +48,7 @@ test('a maxed-out lifetime stat block earns every achievement', () => {
     runs: 1e6,
     maxChain: 1e6,
     biomesReached: BIOMES.length,
+    wins: 1e6,
   };
   const results = evaluate(maxed);
   for (const r of results) {
@@ -89,7 +90,7 @@ test('pendingUnlocks never reports an unearned achievement', () => {
 test('pendingUnlocks returns ACHIEVEMENTS order, not the order of `seen`', () => {
   // The toast queue shows these in the order returned. That order must come from the
   // table, not from however the caller's storage happened to serialise its keys.
-  const all = { bestMetres: 9999, totalFeathers: 9999, runs: 9999, maxChain: 9999, biomesReached: BIOMES.length };
+  const all = { bestMetres: 9999, totalFeathers: 9999, runs: 9999, maxChain: 9999, biomesReached: BIOMES.length, wins: 9999 };
   const table = ACHIEVEMENTS.map((a) => a.key);
   assert.deepEqual(pendingUnlocks(all, []).map((a) => a.key), table);
   // Same query, but `seen` mentions a later key first — must not perturb the result.
@@ -110,6 +111,17 @@ test('pendingUnlocks is total against junk from localStorage', () => {
     );
   }
   assert.deepEqual(pendingUnlocks(null, null), [], 'junk stats too');
+});
+
+test('escape achievements track wins; featherBaron tracks lifetime feathers', () => {
+  const base = { bestMetres: 0, totalFeathers: 0, runs: 0, maxChain: 0, biomesReached: 0, wins: 0 };
+  const keys = (s) => evaluate(s).filter((r) => r.done).map((r) => r.key);
+  assert.ok(!keys(base).includes('escape'));
+  assert.ok(keys({ ...base, wins: 1 }).includes('escape'));
+  assert.ok(!keys({ ...base, wins: 9 }).includes('escapeMany'));
+  assert.ok(keys({ ...base, wins: 10 }).includes('escapeMany'));
+  assert.ok(!keys({ ...base, totalFeathers: 4999 }).includes('featherBaron'));
+  assert.ok(keys({ ...base, totalFeathers: 5000 }).includes('featherBaron'));
 });
 
 test('pendingUnlocks carries the name and hint the toast needs', () => {

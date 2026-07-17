@@ -15,6 +15,7 @@ import { BIOMES } from './biome.js';
  * @property {number} runs
  * @property {number} maxChain
  * @property {number} biomesReached
+ * @property {number} wins
  */
 
 /** @typedef {{key:string, name:string, hint:string, done:(s:Stats)=>boolean}} Achievement */
@@ -42,6 +43,7 @@ function normalize(stats) {
     runs: num(s.runs),
     maxChain: num(s.maxChain),
     biomesReached: num(s.biomesReached),
+    wins: num(s.wins),
   };
 }
 
@@ -99,6 +101,24 @@ export const ACHIEVEMENTS = Object.freeze([
     name: 'Dedicated',
     hint: 'Play 25 runs.',
     done: (s) => s.runs >= 25,
+  }),
+  Object.freeze({
+    key: 'escape',
+    name: 'The Great Escape',
+    hint: 'Catch the escape truck',
+    done: (s) => s.wins >= 1,
+  }),
+  Object.freeze({
+    key: 'escapeMany',
+    name: 'Serial Escapee',
+    hint: 'Escape 10 times',
+    done: (s) => s.wins >= 10,
+  }),
+  Object.freeze({
+    key: 'featherBaron',
+    name: 'Feather Baron',
+    hint: 'Earn 5000 feathers all-time',
+    done: (s) => s.totalFeathers >= 5000,
   }),
 ]);
 

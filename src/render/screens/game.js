@@ -428,6 +428,7 @@ export function gameScreen(go, arg) {
         // biome credited for achievements matches the one the field and the
         // live HUD actually showed, not a start-relative reading of it.
         biomeIndex: biomeIndexAtY(state.maxY),
+        won: state.phase === 'won',
       });
       if (daily) {
         setDailyBest(day, metres);

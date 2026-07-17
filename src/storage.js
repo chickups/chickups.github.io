@@ -18,6 +18,7 @@ const K = {
   statRuns: 'chickup.stat.runs',
   statMaxChain: 'chickup.stat.maxChain',
   statBiomesReached: 'chickup.stat.biomesReached',
+  statWins: 'chickup.stat.wins',
   // Lifetime feathers ever earned. Deliberately separate from `feathers` (the
   // spendable balance): spending in the shop must not un-earn a feather achievement.
   statTotalFeathers: 'chickup.stat.totalFeathers',
@@ -224,6 +225,7 @@ export function getStats() {
     runs: readNumber(K.statRuns, 0),
     maxChain: readNumber(K.statMaxChain, 0),
     biomesReached: readNumber(K.statBiomesReached, 0),
+    wins: readNumber(K.statWins, 0),
   };
 }
 
@@ -232,9 +234,9 @@ export function getStats() {
  * spendable feather balance, and every lifetime stat achievements read. This is
  * the single call site meant to replace ad hoc `setBest`/`addFeathers` calls at
  * the end of a run — calling both that and this would double-credit feathers.
- * @param {{metres: number, feathers: number, maxChain: number, biomeIndex: number}} run
+ * @param {{metres: number, feathers: number, maxChain: number, biomeIndex: number, won: boolean}} run
  */
-export function recordRun({ metres, feathers, maxChain, biomeIndex }) {
+export function recordRun({ metres, feathers, maxChain, biomeIndex, won = false }) {
   setBest(metres);
   addFeathers(feathers);
   write(K.statRuns, String(readNumber(K.statRuns, 0) + 1));
@@ -242,6 +244,7 @@ export function recordRun({ metres, feathers, maxChain, biomeIndex }) {
   write(K.statMaxChain, String(Math.max(readNumber(K.statMaxChain, 0), Math.floor(maxChain) || 0)));
   const reached = Math.max(0, Math.floor(biomeIndex) + 1);
   write(K.statBiomesReached, String(Math.max(readNumber(K.statBiomesReached, 0), reached)));
+  write(K.statWins, String(readNumber(K.statWins, 0) + (won ? 1 : 0)));
 }
 
 /**
