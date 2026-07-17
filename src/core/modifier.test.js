@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MODIFIERS, modifierForDay, baseTuning, applyModifier } from './modifier.js';
-import { PHYSICS, FIELD, ESCAPE, MODIFIER } from './tokens.js';
+import { PHYSICS, FIELD, ZONES, ESCAPE, MODIFIER } from './tokens.js';
 import { makeField } from './field.js';
 import { makeZones } from './zones.js';
 import { createRun, step } from './run.js';
@@ -234,4 +234,73 @@ test('gearWeightBoost does not change the PRNG DRAW COUNT', () => {
     assert.equal(boosted.propAt(i).y, plain.propAt(i).y, `prop ${i} y moved`);
     assert.equal(boosted.propAt(i).x, plain.propAt(i).x, `prop ${i} x moved — draw count changed`);
   }
+});
+
+test('zones.js reads tuning.trucksEverywhere — Rush Hour puts traffic in every biome', () => {
+  const rush = applyModifier(MODIFIERS.find((m) => m.key === 'rushHour') || null);
+  const seed = 4242;
+  // Roadside/orchard/ridge/factory are `trucks: false` in biome.js. Below 750m
+  // (highway's gate) a plain run has no truck at all.
+  const lo = 0;
+  const hi = 700 * 10; // 700m in points (SCORING.pointsPerMetre = 10)
+
+  const plain = makeZones(seed, makeField(seed));
+  assert.equal(plain.trucksInRange(lo, hi).length, 0, 'a plain run has no trucks below highway');
+
+  const field = makeField(seed);
+  const rushZones = makeZones(seed, field, rush);
+  assert.ok(rushZones.trucksInRange(lo, hi).length > 0, 'Rush Hour must spawn trucks low down');
+});
+
+test('zones.js reads tuning.updraftScale — Tailwind makes updrafts more frequent', () => {
+  const tailwind = applyModifier(MODIFIERS.find((m) => m.key === 'tailwind') || null);
+  // Measured over the WHOLE climb, not a single 200m band. The spacing formula
+  // jitters each gap over 0.75..1.25 of updraftEvery (390-650pt plain), so a 200m
+  // band holds only ~4 drafts and that jitter swamps the 1.25x effect: sampled
+  // across 60 seeds, a 200m band shows no increase in 16 of them. That would be a
+  // test that fails on a correct implementation depending on the seed. The effect
+  // is unambiguous once the sample is large enough to average the jitter out.
+  // ridge (350m) and escape (1000m) are the only biomes with updrafts.
+  for (const seed of [1, 555, 4242, 99999]) {
+    const plain = makeZones(seed, makeField(seed)).updraftsInRange(0, 20000).length;
+    const windy = makeZones(seed, makeField(seed), tailwind).updraftsInRange(0, 20000).length;
+    assert.ok(windy > plain, `seed ${seed}: tailwind must pack drafts closer: ${windy} vs ${plain}`);
+  }
+});
+
+test('Tailwind tightens the updraft SPACING itself, to within the scaled ceiling', () => {
+  // The count test above proves "more drafts"; this pins down the MECHANISM — that
+  // updraftScale divides the spacing rather than moving some other term.
+  //
+  // It cannot compare draft-to-draft against the plain stream: `updraftsInRange`
+  // yields only ridge/escape drafts, and since Tailwind moves every draft DOWN, a
+  // given list position maps to a different underlying index in each stream. So this
+  // asserts against the spacing formula's own algebraic ceiling instead.
+  //
+  // Inside ridge (3500-5500pt) every index yields a draft, so consecutive drafts are
+  // consecutive indices and each gap is exactly `updraftEvery/scale * (0.75+0.5*draw)`
+  // — bounded above by `updraftEvery * 1.25 / scale` = 520pt. A plain run's own
+  // ceiling is 650pt, and plain gaps DO exceed 520 on these seeds (587.9, 570.7,
+  // 580.4), so an implementation that ignored updraftScale would breach this bound.
+  const tailwind = applyModifier(MODIFIERS.find((m) => m.key === 'tailwind') || null);
+  const ceiling = (ZONES.updraftEvery * 1.25) / MODIFIER.tailwindScale;
+  for (const seed of [1, 555, 4242, 99999]) {
+    const ys = makeZones(seed, makeField(seed), tailwind).updraftsInRange(3500, 5500).map((u) => u.y);
+    assert.ok(ys.length > 2, `seed ${seed} needs drafts in ridge to measure`);
+    for (let i = 1; i < ys.length; i++) {
+      const gap = ys[i] - ys[i - 1];
+      assert.ok(
+        gap <= ceiling + 1e-9,
+        `seed ${seed} draft ${i}: gap ${gap.toFixed(1)}pt exceeds the Tailwind ceiling ` +
+          `${ceiling}pt — updraftScale is not dividing the spacing.`,
+      );
+    }
+  }
+});
+
+test('an omitted tuning leaves zones.js exactly as it was', () => {
+  const a = makeZones(555, makeField(555));
+  const b = makeZones(555, makeField(555), baseTuning());
+  assert.deepEqual(a.updraftsInRange(0, 20000), b.updraftsInRange(0, 20000));
+  assert.deepEqual(a.trucksInRange(0, 20000), b.trucksInRange(0, 20000));
 });
