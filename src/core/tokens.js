@@ -286,6 +286,68 @@ export const HAZARD = Object.freeze({
 });
 
 /**
+ * The Great Escape's finale. Spec D5: the truck sits at 1200m, giving the escape
+ * biome (which opens at 1000m — `biome.js`) a 200m final gauntlet.
+ *
+ * A GUESS, made against physics constants nobody has playtested. It lives here
+ * precisely because it is a tuning knob: `core/modifier.js`'s `baseTuning()`
+ * reads it, and Low Ceiling overrides it.
+ */
+export const ESCAPE = Object.freeze({
+  truckHeightM: 1200,
+});
+
+/**
+ * The seven Daily Run modifiers' magnitudes. Kept here, not in `core/modifier.js`,
+ * for the same reason every other number is: `modifier.js` holds the RULES, tokens
+ * holds the TUNING SURFACE.
+ *
+ * Read the TUNING NOTE above before touching `thinAirGapScale`. It is the only
+ * entry here that can make the game unwinnable, and `modifier.test.js` has a test
+ * that fails if it does.
+ */
+export const MODIFIER = Object.freeze({
+  /** Bouncy Hay. Multiplies the pad bounce: 420 -> 546, a 532pt rise vs 315pt. */
+  bouncyHayMod: 1.3,
+  /** Feather Frenzy. The doc's "Double feathers". */
+  featherFrenzyScale: 2,
+  /**
+   * Thin Air. 200 -> 230 against a max rise of 247pt: a 1.07x margin, the tightest
+   * the field has ever been (base is 1.24x). DO NOT WIDEN without re-measuring —
+   * `every modifier leaves the field winnable` in modifier.test.js is the guard.
+   *
+   * Note on trucks: `HAZARD.truckPropClearance` is derived from `FIELD.gapMax` (200)
+   * at module load and does NOT track this override. That is the safe direction —
+   * Thin Air spreads the props FURTHER apart, so the nudge search has MORE room to
+   * land a safe truck height, not less. Raising the clearance to match would only
+   * make it stricter than the geometry can satisfy and start dropping trucks, which
+   * is the "trucks silently vanish" bug the harbour work already paid for once.
+   */
+  thinAirGapScale: 1.15,
+  /**
+   * Tailwind. Scales updraft lift AND updraft max speed AND updraft frequency.
+   * Scaling lift alone would do almost nothing: `run.js` clamps to `ZONES.updraftMaxV`,
+   * so a stronger push just reaches the same 300 pt/s ceiling a few frames sooner.
+   */
+  tailwindScale: 1.25,
+  /**
+   * Slick Gears. Multiplies the GEAR weight in a biome's `kinds` table — so
+   * factory's [tire 2, gear 2] becomes [tire 2, gear 6]. It changes how OFTEN a
+   * gear spawns and NOTHING else. Spec D2: gear speed is untouchable, because
+   * launch speed is derived from it and slowing a gear collapses max rise from
+   * 386pt to 6.6pt.
+   */
+  slickGearsWeightBoost: 3,
+  /**
+   * Low Ceiling. 1100m, NOT 1000m. The Great Escape *begins* at 1000m
+   * (`biome.js`), so a 1000m truck would sit exactly on the biome gate and the
+   * player would win the instant they entered it — deleting the very gauntlet
+   * this modifier is meant to shorten.
+   */
+  lowCeilingHeightM: 1100,
+});
+
+/**
  * The lifetime-feather ladder (spec D7). Read against `statTotalFeathers`, NOT the
  * spendable balance — spending in the shop must never un-earn a milestone.
  *
