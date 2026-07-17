@@ -13,6 +13,13 @@ test('playing twice in one day does not advance the streak', () => {
   assert.deepEqual(second, { day: 20000, length: 1 }, 'same day must be idempotent');
   // And a third time, for good measure: idempotence is the property, not "twice".
   assert.deepEqual(advanceStreak(second, 20000), { day: 20000, length: 1 });
+
+  // The assertions above all land on length 1, where "stay put" and "reset to
+  // 1" are the same value — a weakened same-day clamp that fell through to
+  // the gap branch would return {day, length:1} here too, and this test
+  // would stay green. Assert at a length > 1, where staying put and
+  // resetting are distinguishable, so a real regression actually fails.
+  assert.deepEqual(advanceStreak({ day: 20000, length: 4 }, 20000), { day: 20000, length: 4 });
 });
 
 test('consecutive calendar days advance the streak', () => {
@@ -60,6 +67,13 @@ test('a corrupt stored streak is treated as a first-ever play', () => {
     /** @type {any} */ ({ day: 20000, length: null }),
     /** @type {any} */ ({ day: NaN, length: 3 }),
     /** @type {any} */ ({ day: 20000, length: Infinity }),
+    // A numeric-*string* day (plausible from hand-edited JSON) is the case
+    // that actually exercises isState's field guards: `'x'` above is
+    // non-coercible and falls through the gap branch either way, but
+    // `'20000' <= 20000` coerces to true, so a gutted isState that skips
+    // Number.isFinite(prev.day) would let this string day survive the
+    // same-day clamp and poison storage with {day:'20000', length:2}.
+    /** @type {any} */ ({ day: '20000', length: 2 }),
   ]) {
     assert.deepEqual(advanceStreak(junk, 20000), { day: 20000, length: 1 }, `junk: ${JSON.stringify(junk)}`);
   }
