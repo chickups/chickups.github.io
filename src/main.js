@@ -16,6 +16,11 @@ import { shopScreen } from './render/screens/shop.js';
 import { achievementsScreen } from './render/screens/achievements.js';
 import { settingsScreen } from './render/screens/settings.js';
 
+// No browser context menu anywhere: a right-click on desktop or a long-press on
+// touch would otherwise raise it mid-run, over a game whose only verb is a tap.
+// This suppresses the MENU, not the input — right-click still reaches the page.
+window.addEventListener('contextmenu', (e) => e.preventDefault());
+
 const stage = /** @type {HTMLElement} */ (document.getElementById('stage'));
 installViewport(stage);
 installStyles();
