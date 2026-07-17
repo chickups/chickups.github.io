@@ -279,8 +279,20 @@ export function gameScreen(go, arg) {
     for (const { index, truck } of liveTrucks) {
       const node = truckEls.get(index);
       if (!node) continue;
-      node.style.left = px(truckX(truck, state.t) - HAZARD.truckW / 2);
       const tell = truckTelling(truck, state.t);
+      // During the tell the truck is parked off-field at its EXIT edge — truckX
+      // returns the far edge once a crossing finishes. The glow is this node's
+      // child, so positioning by truckX would pulse the warning on the side the
+      // truck just LEFT. Park the (still invisible, still off-field) node at the
+      // ENTRY edge instead — dir=1 enters from the left, dir=-1 from the right —
+      // so the glow peeks onto the field exactly where the truck is about to
+      // appear. This is the truck's own cyclePhase=0 position, computed here to
+      // avoid a second core call: dir=1 -> -truckW, dir=-1 -> field width.
+      node.style.left = px(
+        tell
+          ? (truck.dir === 1 ? -HAZARD.truckW : vp.w)
+          : truckX(truck, state.t) - HAZARD.truckW / 2,
+      );
       if (tell !== truckTells.get(index)) {
         truckTells.set(index, tell);
         node.replaceChildren(hazardTruck(HAZARD.truckW, HAZARD.truckH, truck.dir, true, tell));
