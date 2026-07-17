@@ -57,7 +57,14 @@ export function gameScreen(go, arg) {
   // pure function of its seed, so every player gets the same route with no
   // server involved. Only a leaderboard would need one.
   const daily = Boolean(arg && arg.daily);
-  const day = dayNumber(Date.now(), new Date().getTimezoneOffset());
+  // Prefer the day the Daily screen already computed and passed in. Reading the
+  // clock fresh here would let a dwell across local midnight play a different
+  // route/modifier than the one the screen advertised. A plain run has no
+  // arg.day and reads the clock (its `day` only feeds the daily-only branches).
+  const day =
+    daily && arg && Number.isFinite(arg.day)
+      ? arg.day
+      : dayNumber(Date.now(), new Date().getTimezoneOffset());
   const seed = daily ? dailySeed(day) : ((Date.now() >>> 0) || 1);
   // The route comes from the seed; the RULES come from the modifier. Two separate
   // jobs, deliberately: `dailySeed` identifies which route today is, and

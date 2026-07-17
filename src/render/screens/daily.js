@@ -274,7 +274,13 @@ export function dailyScreen(go) {
         position: 'absolute', left: px(24), right: px(24), bottom: px(40), zIndex: '20',
         display: 'flex', flexDirection: 'column', gap: px(10),
       },
-      primaryButton('Start Daily Run', 'play', () => go('game', { daily: true }), { size: 22 }),
+      // Hand the game the SAME day this screen computed, not a fresh clock read.
+      // The screen exists to make the player stop and read the modifier, so the
+      // dwell can span local midnight — and then a second clock read in game.js
+      // would play the next day's route under the modifier this screen advertised.
+      // Threading `day` makes the seed, modifier, daily-best and streak all agree
+      // on the day the player was actually shown.
+      primaryButton('Start Daily Run', 'play', () => go('game', { daily: true, day }), { size: 22 }),
       el('div', { display: 'flex', gap: px(12) }, secondaryButton('Home', 'home', () => go('home'))),
     ),
   );
