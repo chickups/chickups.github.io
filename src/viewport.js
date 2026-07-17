@@ -11,10 +11,10 @@ import { DESIGN } from './core/tokens.js';
  * content. The same effect in miniature made the celebrating Peep sit on the
  * Go Again button on a 375x667 iPhone SE (699pt tall).
  *
- * Taking the min against `h / DESIGN.refHeight` floors the design height at
- * refHeight on every device, and letterboxes horizontally instead. Taller
- * phones still see more sky (h stays > refHeight when the screen is narrower
- * than the design aspect) — only screens that are WIDER than 393:852 get bars.
+ * Taking the min against `h / DESIGN.refHeight` makes the design space exactly
+ * 393x852 everywhere: whichever axis runs out first sets the scale, and the
+ * other axis gets a letterbox bar (the body's background shows through). A
+ * screen wider than 393:852 gets side bars; a narrower one gets top/bottom bars.
  *
  * @param {number} w window.innerWidth
  * @param {number} h window.innerHeight
@@ -25,36 +25,44 @@ function scaleFor(w, h) {
 }
 
 /**
- * The viewport in design points. Width is always DESIGN.width; height is at
- * least DESIGN.refHeight and grows on phones narrower than the design aspect,
- * so taller phones see more sky.
+ * The viewport in design points. A CONSTANT: the design space is exactly
+ * DESIGN.width x DESIGN.refHeight on every device, and anything left over is a
+ * letterbox bar, not extra play area.
  *
- * Because height can no longer fall below refHeight, this is also what makes a
- * run device-independent: `viewportH` feeds the camera, so a floating height
- * meant a taller phone literally saw more field for the same seed — and a
- * ghost recorded on one device could desync on another.
+ * This is what makes a run device-independent, which it never was before.
+ * `viewportH` feeds the camera (`CAMERA.peepAnchor` is a fraction of it), so a
+ * height that varied per device meant a taller phone literally saw more field
+ * for the same seed — the same route was a different game, and a ghost recorded
+ * on one device could desync on another. Both are now impossible by
+ * construction.
+ *
+ * The cost, chosen deliberately: a device whose aspect is not 393:852 shows
+ * bars rather than filling its screen. Do NOT "reclaim" them by letting height
+ * float again — that silently re-breaks determinism, and the break is invisible
+ * until two different phones disagree about a ghost.
  * @returns {{w:number, h:number}}
  */
 export function viewportPoints() {
-  const s = scaleFor(window.innerWidth, window.innerHeight);
-  return { w: DESIGN.width, h: window.innerHeight / s };
+  return { w: DESIGN.width, h: DESIGN.refHeight };
 }
 
 /**
- * Scale the stage to fit, and centre it horizontally when the screen is wider
- * than the scaled design width (desktop, landscape, short phones).
+ * Scale the stage to fit and centre it on both axes, letterboxing whatever the
+ * device's aspect leaves over.
  *
  * The stage keeps `transform-origin: top left`, so centring cannot go through
- * `translateX(-50%)` — that would resolve against the element's own unscaled
- * 393px and be wrong at every scale but 1. The offset is computed here instead.
+ * `translate(-50%, -50%)` — that would resolve against the element's own
+ * UNSCALED 393x852 box and be wrong at every scale but 1. The offsets are
+ * computed here against the scaled size instead.
  * @param {HTMLElement} stage
  */
 export function installViewport(stage) {
   const apply = () => {
     const s = scaleFor(window.innerWidth, window.innerHeight);
     document.documentElement.style.setProperty('--s', String(s));
-    stage.style.height = `${window.innerHeight / s}px`;
-    stage.style.left = `${Math.max(0, (window.innerWidth - DESIGN.width * s) / 2)}px`;
+    stage.style.height = `${DESIGN.refHeight}px`;
+    stage.style.left = `${(window.innerWidth - DESIGN.width * s) / 2}px`;
+    stage.style.top = `${(window.innerHeight - DESIGN.refHeight * s) / 2}px`;
   };
   window.addEventListener('resize', apply);
   apply();
