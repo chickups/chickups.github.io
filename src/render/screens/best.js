@@ -2,7 +2,7 @@
 import { el, px } from '../el.js';
 import { peep } from '../art/peep.js';
 import { icon } from '../art/icon.js';
-import { primaryButton, secondaryButton } from '../ui.js';
+import { primaryButton, secondaryButton, statTile, pill } from '../ui.js';
 import { COLORS } from '../../core/tokens.js';
 import { success } from '../../haptics.js';
 
@@ -44,29 +44,53 @@ export function bestScreen(go, arg) {
         borderRadius: px(22), transform: 'rotate(-3deg)',
       }, 'NEW BEST!'),
     ),
+    // The hero numeral. 84, not the old 108: §05's labelled PREVIOUS/NEW pair and
+    // the REWARD block below both need the height, and the pair now carries the
+    // "m" unit that the bare numeral never had.
     el(
       'div',
-      { position: 'absolute', top: px(196), left: '0px', right: '0px', textAlign: 'center', zIndex: '4' },
+      { position: 'absolute', top: px(190), left: '0px', right: '0px', textAlign: 'center', zIndex: '4' },
       el('div', {
-        font: `800 ${px(108)} 'Baloo 2'`, color: COLORS.cream, lineHeight: '1',
+        font: `800 ${px(84)} 'Baloo 2'`, color: COLORS.cream, lineHeight: '1',
         textShadow: '0 6px 0 #D9701E,0 12px 16px rgba(75,53,36,.3)',
       }, String(arg.score)),
     ),
-    arg.previousBest > 0
-      ? el('div', {
-          position: 'absolute', top: px(310), left: '0px', right: '0px',
-          textAlign: 'center', zIndex: '4', font: `800 ${px(13)} 'Nunito'`,
-          letterSpacing: '.06em', color: '#7A3E12', opacity: '.75',
-        }, `PREVIOUS ${arg.previousBest}`)
-      : null,
     el('div', {
-      position: 'absolute', top: px(330), left: '0px', right: '0px',
+      position: 'absolute', top: px(276), left: '0px', right: '0px',
       textAlign: 'center', zIndex: '4', font: `700 ${px(18)} 'Nunito'`, color: '#7A3E12',
     }, 'You flew farther than ever!'),
+    // §05's labelled pair: PREVIOUS 676 / NEW 842 m. A first-ever best has no
+    // previous, so that tile shows an em dash rather than a misleading "0".
+    el(
+      'div',
+      {
+        position: 'absolute', top: px(304), left: px(24), right: px(24), zIndex: '4',
+        display: 'flex', gap: px(10),
+      },
+      statTile('PREVIOUS', arg.previousBest > 0 ? String(arg.previousBest) : '—', 28),
+      statTile('NEW', `${arg.score} m`, 28),
+    ),
+    // §05's REWARD +30. `arg.feathers` is this run's take, which `recordRun` has
+    // already banked by the time this screen mounts — this only reports it.
+    el(
+      'div',
+      {
+        position: 'absolute', top: px(384), left: '0px', right: '0px', zIndex: '4',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: px(6),
+      },
+      el('div', {
+        font: `800 ${px(13)} 'Nunito'`, letterSpacing: '.06em', color: '#7A3E12', opacity: '.75',
+      }, 'REWARD'),
+      pill('feather', `+${arg.feathers}`, COLORS.yellowD),
+    ),
+    // Deliberate omission, carried forward from the slice-1 spec and re-affirmed
+    // in the slice-3 spec's Out of Scope table: there is NO Share button here.
+    // The `share` glyph exists in art/icon.js, which makes this look like an
+    // oversight. It is not. Do not add one.
     el('div', {
-      position: 'absolute', top: px(352), left: '50%', transform: 'translateX(-50%)',
+      position: 'absolute', top: px(452), left: '50%', transform: 'translateX(-50%)',
       zIndex: '3', animation: 'pFloat 2s ease-in-out infinite',
-    }, peep(150, 'celebrate')),
+    }, peep(130, 'celebrate')),
     el(
       'div',
       { position: 'absolute', left: px(24), right: px(24), bottom: px(52), zIndex: '5' },
