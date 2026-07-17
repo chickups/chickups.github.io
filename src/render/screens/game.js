@@ -342,7 +342,11 @@ export function gameScreen(go, arg) {
     // built near every boundary. See final-fixes report #5.
     const biome = biomeAtY(state.maxY);
     bg.setSky(biome.key);
-    hud.update(scoreOf(state), state.mult, tip, biome.key);
+    // The meter only exists in the final band: `tuning.truckHeightM` is the
+    // live escape height (metres), already adjusted for the Low Ceiling daily
+    // modifier — so `progress` tracks the actual truck, not a hardcoded 1200.
+    const progress = biome.key === 'escape' ? scoreOf(state) / tuning.truckHeightM : null;
+    hud.update(scoreOf(state), state.mult, tip, biome.key, progress);
   }
 
   // --- loop ------------------------------------------------------------

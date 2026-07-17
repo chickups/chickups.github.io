@@ -56,6 +56,27 @@ export function makeHud(onPause) {
     textAlign: 'center', animation: 'pPop .3s ease-out',
   }, tipText));
 
+  const meterFill = el('div', {
+    position: 'absolute', left: '0px', right: '0px', bottom: '0px',
+    background: COLORS.orange, borderRadius: px(6), height: '0%',
+    transition: 'height .12s linear',
+  });
+  const meterPeep = el('div', {
+    position: 'absolute', left: '50%', transform: 'translate(-50%,50%)',
+    bottom: '0%', width: px(10), height: px(10), borderRadius: '50%',
+    background: COLORS.cream, boxShadow: `0 0 0 ${px(2)} ${COLORS.ink}`,
+    transition: 'bottom .12s linear',
+  });
+  const meter = el('div', {
+    position: 'absolute', top: px(150), right: px(14), bottom: px(180),
+    width: px(10), background: 'rgba(75,53,36,.18)', borderRadius: px(6),
+    zIndex: '30', pointerEvents: 'none', display: 'none',
+  },
+    el('div', { position: 'absolute', top: px(-26), left: '50%', transform: 'translateX(-50%)' },
+      icon('truck', 22, COLORS.ink)),
+    meterFill, meterPeep,
+  );
+
   const pause = el('div', {
     position: 'absolute', top: px(66), left: px(18), zIndex: '30',
     width: px(44), height: px(44), borderRadius: '50%',
@@ -77,6 +98,7 @@ export function makeHud(onPause) {
     }, score, mult),
     biomeBanner,
     tip,
+    meter,
   );
   pause.style.pointerEvents = 'auto';
 
@@ -94,8 +116,10 @@ export function makeHud(onPause) {
      * @param {number} m multiplier
      * @param {string} t tip text; empty hides the bubble
      * @param {string} [biomeKey] a `BIOMES[].key`; omit to leave the banner alone
+     * @param {number|null} [progress] 0-1 distance to the escape truck; omit or
+     *   pass `null` to hide the meter (only shown in the `escape` biome)
      */
-    update(s, m, t, biomeKey) {
+    update(s, m, t, biomeKey, progress) {
       score.textContent = String(s);
       mult.textContent = `×${m}`;
       if (t !== lastTip) {
@@ -126,6 +150,15 @@ export function makeHud(onPause) {
             }, BANNER_HOLD_MS);
           }
         }
+      }
+
+      if (progress === undefined || progress === null) {
+        meter.style.display = 'none';
+      } else {
+        const pct = Math.max(0, Math.min(1, progress)) * 100;
+        meter.style.display = 'block';
+        meterFill.style.height = `${pct}%`;
+        meterPeep.style.bottom = `${pct}%`;
       }
     },
   };
