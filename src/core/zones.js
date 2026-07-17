@@ -6,7 +6,34 @@ import { baseTuning } from './modifier.js';
 
 /** @typedef {import('./field.js').Field} Field */
 /** @typedef {{x:number, y:number, w:number, h:number}} Updraft */
-/** @typedef {{y:number, dir:1|-1, speed:number, phase:number}} Truck */
+/** @typedef {{y:number, dir:1|-1, speed:number, beat:number}} Truck */
+
+/** pt. The wrap span: one truck-width wider than the field on each side, so a
+ *  truck fully clears the field before it reappears rather than popping in at
+ *  the boundary. */
+const TRUCK_SPAN = DESIGN.width + HAZARD.truckW;
+/** s. How long one crossing of TRUCK_SPAN takes: 523 / 90 = 5.811s. */
+const TRUCK_CROSS_S = TRUCK_SPAN / HAZARD.truckSpeed;
+/**
+ * The number of beats in one truck cycle, and the whole trick of the shared beat.
+ *
+ * A crossing takes 5.811s, which is NOT a whole number of 1.8s beats (3.23 of
+ * them). If a truck simply wrapped and re-entered immediately — slice 2's model —
+ * its second entry would land at 5.811s, its third at 11.62s, and it would drift
+ * off the beat grid within one crossing. There would be no beat at all.
+ *
+ * So the cycle is rounded UP to the next whole beat (4 beats = 7.2s) and the
+ * truck PARKS fully off-field at the far edge for the remaining 1.39s. Every
+ * entry then lands exactly on the grid, forever, for every truck.
+ *
+ * The parked position is entirely outside the field, so the wait is invisible —
+ * and it means a truck is present LESS of the time than under the continuous
+ * wrap, never more, which is the direction that matters for the harbour geometry
+ * (see HAZARD.truckPropClearance's note in tokens.js).
+ */
+export const TRUCK_BEATS_PER_CYCLE = Math.ceil(TRUCK_CROSS_S / HAZARD.truckBeatS);
+/** s. One truck cycle: a whole number of beats, by construction. 7.2s. */
+export const TRUCK_CYCLE_S = TRUCK_BEATS_PER_CYCLE * HAZARD.truckBeatS;
 /**
  * @typedef {{
  *   updraftsInRange:(minY:number,maxY:number)=>Updraft[],
@@ -138,14 +165,20 @@ export function makeZones(seed, field, tuning = baseTuning()) {
     while (truckCache.length <= index) {
       const i = truckCache.length;
       const prevY = i === 0 ? 0 : truckY[i - 1];
-      // Four draws, always, in this order: spacing jitter, direction, phase,
+      // Four draws, always, in this order: spacing jitter, direction, beat slot,
       // nudge tie-break. The nudge draw is consumed even when the candidate
       // height turns out safe and needs no nudge at all — a draw count that
       // depended on whether a nudge is needed would make every later slot's
       // position depend on earlier ones' luck, same as the other three.
+      //
+      // The third draw used to be a continuous phase within the wrap span. It is
+      // now a BEAT SLOT: the same one draw, quantised onto the shared grid. The
+      // draw count and order are unchanged, deliberately — every truck's HEIGHT
+      // (spacingDraw + nudgeDraw + the field) is therefore bit-identical to
+      // before this task, which is the whole harbour argument.
       const spacingDraw = truckRng();
       const dirDraw = truckRng();
-      const phaseDraw = truckRng();
+      const beatDraw = truckRng();
       const nudgeDraw = truckRng();
       // The CANDIDATE height, used for spacing chaining (prevY above) and for
       // trucksInRange's early-exit below. This is what stays monotonically
@@ -166,11 +199,14 @@ export function makeZones(seed, field, tuning = baseTuning()) {
         // stayed inside the same biome that admitted the candidate.
         if (safeY !== null && (tuning.trucksEverywhere || biomeAtY(safeY).trucks)) {
           const dir = /** @type {1|-1} */ (dirDraw < 0.5 ? -1 : 1);
-          // Starting offset within the wrap span (see truckX), so trucks born
-          // at different indices are not phase-locked to each other.
-          const span = DESIGN.width + HAZARD.truckW;
-          const phase = phaseDraw * span;
-          truck = { y: safeY, dir, speed: HAZARD.truckSpeed, phase };
+          // Which beat of the shared cycle this truck enters on. Trucks still
+          // differ from one another — but only by a whole number of beats, so
+          // every entry in the field lands on the same 1.8s grid.
+          const beat = Math.min(
+            TRUCK_BEATS_PER_CYCLE - 1,
+            Math.floor(beatDraw * TRUCK_BEATS_PER_CYCLE),
+          );
+          truck = { y: safeY, dir, speed: HAZARD.truckSpeed, beat };
         }
       }
       truckCache.push(truck);
@@ -280,27 +316,62 @@ export function makeZones(seed, field, tuning = baseTuning()) {
 }
 
 /**
+ * Position within this truck's cycle, in seconds since its own entry. Shared by
+ * `truckX` and `truckTelling` so the two can never disagree about when a truck
+ * enters.
+ * @param {Truck} truck
+ * @param {number} t seconds since the run began
+ * @returns {number} in [0, TRUCK_CYCLE_S)
+ */
+function cyclePhase(truck, t) {
+  const offset = t - truck.beat * HAZARD.truckBeatS;
+  return ((offset % TRUCK_CYCLE_S) + TRUCK_CYCLE_S) % TRUCK_CYCLE_S;
+}
+
+/**
  * A truck's x position at run-time `t`, in seconds since the run began.
  *
- * PURE — a closed form of `(truck, t)` only, never integrated frame by
- * frame. This is load-bearing: a ghost replay (a later task) reproduces
- * truck positions purely from the run clock, and an integrated position
- * could never be replayed exactly.
+ * PURE — a closed form of `(truck, t)` only, never integrated frame by frame.
+ * This is load-bearing and MUST STAY THAT WAY: a ghost replay reproduces truck
+ * positions purely from the run clock, and an integrated position could never be
+ * replayed exactly.
  *
- * The truck travels at constant `speed` in direction `dir`, wrapping inside
- * a span one truck-width wider than the field on each side (`DESIGN.width +
- * HAZARD.truckW`), so it fully clears the field before reappearing on the
- * other edge rather than popping in/out at the boundary.
+ * The truck enters at `beat * truckBeatS` (and every TRUCK_CYCLE_S thereafter),
+ * crosses TRUCK_SPAN at constant `speed` in direction `dir`, then PARKS fully
+ * off-field at the far edge until its next beat comes round. See
+ * TRUCK_BEATS_PER_CYCLE for why the park exists — without it, entries drift off
+ * the shared beat within one crossing.
  *
  * @param {Truck} truck
  * @param {number} t seconds since the run began
  * @returns {number} world x of the truck's centre
  */
 export function truckX(truck, t) {
-  const span = DESIGN.width + HAZARD.truckW;
   const half = HAZARD.truckW / 2;
-  const raw = truck.phase + truck.dir * truck.speed * t;
-  // Wrap into [-half, span - half), i.e. the truck's centre ranges from just
-  // off the left edge to just off the right edge.
-  return (((raw + half) % span) + span) % span - half;
+  // min(): once the crossing is done the truck stops at the far edge rather than
+  // sailing on forever. Both ends of the span are fully outside the field, so the
+  // wait — and the jump back to the near edge at the next beat — are invisible.
+  const travelled = Math.min(cyclePhase(truck, t), TRUCK_CROSS_S) * truck.speed;
+  return truck.dir === 1 ? -half + travelled : TRUCK_SPAN - half - travelled;
+}
+
+/**
+ * Is this truck in its tell window — the `HAZARD.truckTellS` seconds immediately
+ * before it enters?
+ *
+ * This is CORE STATE: a boolean the render layer reads. Core does not know, and
+ * must never learn, that render draws it as a red glow pulsing at the field edge.
+ * Pure in `(truck, t)` for exactly the same reason `truckX` is — a ghost replay
+ * must reproduce the telegraph, not just the truck.
+ *
+ * @param {Truck} truck
+ * @param {number} t seconds since the run began
+ * @returns {boolean}
+ */
+export function truckTelling(truck, t) {
+  const u = cyclePhase(truck, t);
+  // Time until the NEXT entry. At u === 0 the truck is entering right now: that
+  // is the event, not the warning.
+  const untilEntry = TRUCK_CYCLE_S - u;
+  return u > 0 && untilEntry <= HAZARD.truckTellS;
 }

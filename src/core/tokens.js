@@ -252,6 +252,23 @@ export const HAZARD = Object.freeze({
   truckH: TRUCK_H,
   /** pt/s. */
   truckSpeed: 90,
+  /**
+   * s. THE SHARED BEAT (doc §13 / spec C4): "trucks cross lanes on a fixed beat
+   * (every 1.8s)". Every truck's entry lands on a multiple of this, globally —
+   * see zones.js's TRUCK_CYCLE_S for how a crossing that does not divide evenly
+   * into beats is reconciled (the truck waits off-field for the remainder).
+   *
+   * This REPLACES slice 2's per-truck random phase draw, deliberately. That draw
+   * existed so trucks were "not phase-locked to each other"; the doc asks for the
+   * opposite, and a rhythm the player can learn is the point of a tell.
+   */
+  truckBeatS: 1.8,
+  /**
+   * s. How long before entry a truck advertises itself (`truckTelling` in
+   * zones.js). CORE STATE ONLY — core does not know render draws it as a red
+   * glow, and must never learn.
+   */
+  truckTellS: 0.4,
   /** one truck per this many pt of climb, in truck biomes. */
   truckEvery: TRUCK_EVERY,
   /** pt. Peep's collision box is deliberately smaller than his art: near-misses

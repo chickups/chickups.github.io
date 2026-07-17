@@ -9,7 +9,7 @@ import { makeHud } from '../hud.js';
 import { hazardTruck } from '../art/hazardTruck.js';
 import { updraft } from '../art/updraft.js';
 import { makeField } from '../../core/field.js';
-import { makeZones, truckX } from '../../core/zones.js';
+import { makeZones, truckX, truckTelling } from '../../core/zones.js';
 import { biomeAtY, biomeIndexAtY } from '../../core/biome.js';
 import { createRun, step, scoreOf, radiusOf } from '../../core/run.js';
 import { PHYSICS, SCORING, COLORS, PROPS, HAZARD, ZONES, RACE } from '../../core/tokens.js';
@@ -204,6 +204,10 @@ export function gameScreen(go, arg) {
   /** Trucks move every frame, so their nodes need repositioning, not just pooling. */
   /** @type {{index:number, truck:any}[]} */
   let liveTrucks = [];
+  /** Last tell state painted per truck, so the art is only rebuilt on the edge —
+   *  60 rebuilds a second would be a new node per frame per truck. */
+  /** @type {Map<number, boolean>} */
+  const truckTells = new Map();
 
   /**
    * @param {number} lo world y
@@ -251,8 +255,14 @@ export function gameScreen(go, arg) {
         h: HAZARD.truckH,
         truck,
       })),
-      (item) => hazardTruck(HAZARD.truckW, HAZARD.truckH, item.truck.dir),
+      (item) => hazardTruck(HAZARD.truckW, HAZARD.truckH, item.truck.dir, true, truckTelling(item.truck, state.t)),
     );
+    // A truck that just entered the pool was built with its current tell above;
+    // drop tell entries for trucks that left, so the cache cannot grow unbounded
+    // over a long climb or go stale if an index is ever reused.
+    for (const index of truckTells.keys()) {
+      if (!truckEls.has(index)) truckTells.delete(index);
+    }
   }
 
   // --- painting --------------------------------------------------------
@@ -264,10 +274,17 @@ export function gameScreen(go, arg) {
 
     // Trucks are the only world object that moves. Their x is recomputed from
     // truckX(truck, t) rather than integrated, which is exactly what lets a
-    // ghost replay reproduce them from the run clock alone.
+    // ghost replay reproduce them from the run clock alone. The tell is the same
+    // deal: truckTelling(truck, t) is pure core state, so the glow replays too.
     for (const { index, truck } of liveTrucks) {
       const node = truckEls.get(index);
-      if (node) node.style.left = px(truckX(truck, state.t) - HAZARD.truckW / 2);
+      if (!node) continue;
+      node.style.left = px(truckX(truck, state.t) - HAZARD.truckW / 2);
+      const tell = truckTelling(truck, state.t);
+      if (tell !== truckTells.get(index)) {
+        truckTells.set(index, tell);
+        node.replaceChildren(hazardTruck(HAZARD.truckW, HAZARD.truckH, truck.dir, true, tell));
+      }
     }
 
     let rotation;

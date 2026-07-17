@@ -467,9 +467,29 @@ test('an updraft never attaches, and never touches chain/mult/feathers', () => {
 
 // --- trucks: the second failure condition -----------------------------------
 
+/**
+ * Build a test truck whose CENTRE lands at world x `cx` (at height `y`) exactly
+ * when `step` evaluates the collision — i.e. at `s.t === DT`, the clock after a
+ * fresh run's first step.
+ *
+ * Slice 2 parked a stationary test truck with `speed: 0, phase: cx`, reading x
+ * straight off `phase`. Task 13's beat model removed `phase`: a truck's x is now
+ * the closed form `truckX(truck, t)` = -halfW + min(cyclePhase, cross)*speed for
+ * dir 1. With `beat: 0` the cyclePhase at t=DT is just DT, so choosing
+ * `speed = (cx + halfW) / DT` lands the centre precisely on `cx`. These tests
+ * exercise run.js's overlap maths, not truck motion, so pinning the rectangle
+ * where they mean to is all that changed.
+ */
+const truckCentredAt = (/** @type {number} */ cx, /** @type {number} */ y) => ({
+  y,
+  dir: /** @type {1} */ (1),
+  speed: (cx + HAZARD.truckW / 2) / DT,
+  beat: 0,
+});
+
 test('a truck overlapping Peep kills, sets deathBy to truck, and then stays inert', () => {
   const f = makeField(1);
-  const truck = { y: 500, dir: /** @type {1} */ (1), speed: 0, phase: 200 };
+  const truck = truckCentredAt(200, 500);
   const zones = { updraftsInRange: () => [], trucksInRange: () => [truck] };
   let s = createRun(f, VH);
   s = { ...s, phase: 'fly', x: 200, y: 500, vx: 0, vy: 0, lockWheel: -1 };
@@ -483,7 +503,7 @@ test('a truck overlapping Peep kills, sets deathBy to truck, and then stays iner
 
 test('a truck clearly clear of Peep does not kill', () => {
   const f = makeField(1);
-  const truck = { y: 500, dir: /** @type {1} */ (1), speed: 0, phase: 200 };
+  const truck = truckCentredAt(200, 500);
   const zones = { updraftsInRange: () => [], trucksInRange: () => [truck] };
   let s = createRun(f, VH);
   const clearX = 200 + HAZARD.truckW / 2 + HAZARD.peepHitR + 50;
@@ -495,11 +515,12 @@ test('a truck clearly clear of Peep does not kill', () => {
 
 test('a truck one pixel clear of Peep hitbox does not kill (edge precision)', () => {
   const f = makeField(1);
-  const truck = { y: 0, dir: /** @type {1} */ (1), speed: 0, phase: 200 };
+  const truckCx = 200;
+  const truck = truckCentredAt(truckCx, 0);
   const zones = { updraftsInRange: () => [], trucksInRange: () => [truck] };
   let s = createRun(f, VH);
   // Just past the combined half-width + hitbox radius, straight out to the side.
-  const edgeX = truck.phase + HAZARD.truckW / 2 + HAZARD.peepHitR + 1;
+  const edgeX = truckCx + HAZARD.truckW / 2 + HAZARD.peepHitR + 1;
   s = { ...s, phase: 'fly', x: edgeX, y: truck.y, vx: 0, vy: 0, lockWheel: -1 };
   s = step(s, f, DT, false, VH, zones);
   assert.notEqual(s.phase, 'dead');
