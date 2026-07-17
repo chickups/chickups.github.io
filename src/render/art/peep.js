@@ -1,5 +1,5 @@
 // @ts-check
-import { el, px } from '../el.js';
+import { el, px, svg } from '../el.js';
 
 /** @typedef {'idle'|'run'|'launch'|'fly'|'celebrate'|'sad'|'frightened'} PeepPose */
 /** @typedef {'none'|'cowboy'|'goggles'|'cape'} PeepOutfit */
@@ -29,7 +29,11 @@ const POSES = {
 const EYES = {
   happy: { w: 0.29, h: 0.31, pupilX: 0.5, pupilY: 0.42, pupilR: 0.36, brow: null,    blink: true,  arc: false, vein: false },
   focus: { w: 0.27, h: 0.24, pupilX: 0.6, pupilY: 0.5,  pupilR: 0.34, brow: 'angry', blink: false, arc: false, vein: false },
-  joy:   { w: 0.30, h: 0.10, pupilX: 0.5, pupilY: 0.5,  pupilR: 0.38, brow: null,    blink: false, arc: true,  vein: false },
+  // Narrower than the open eyes on purpose. At the shared 0.29-0.30 width the two
+  // arcs overlap at the centre (EYE_CENTERS are 0.28 apart) and merge into a single
+  // unbroken line — a unibrow. Filled eyes may touch, and do: that is the intended
+  // bug-eyed look. Strokes may not.
+  joy:   { w: 0.25, h: 0.10, pupilX: 0.5, pupilY: 0.5,  pupilR: 0.38, brow: null,    blink: false, arc: true,  vein: false },
   sad:   { w: 0.27, h: 0.22, pupilX: 0.4, pupilY: 0.66, pupilR: 0.4,  brow: 'sad',   blink: false, arc: false, vein: false },
   shock: { w: 0.34, h: 0.36, pupilX: 0.5, pupilY: 0.5,  pupilR: 0.18, brow: 'up',    blink: false, arc: false, vein: true },
 };
@@ -139,17 +143,42 @@ function buildFace(S, pose, eyeName, animate) {
     const ex = S * EYE_CENTERS[i] - w / 2;
 
     if (cfg.arc) {
+      // A joy eye is ONE curved stroke (^ ^) — an eye squeezed shut by grinning.
+      // It is the only feature on Peep that is a STROKE rather than a filled shape,
+      // and CSS borders cannot draw one: a bordered box shows its left and right
+      // sides as vertical legs (which reads as a spectacle rim), and dropping them
+      // to zero width makes the curve taper to sharp points that slope down toward
+      // the beak — an angry brow. Both were tried; both were wrong. A path with an
+      // even stroke and round caps is the actual shape, and it ports straight to
+      // SwiftUI's Path.addQuadCurve + StrokeStyle(lineCap: .round).
+      // The viewBox does the scaling, so this stays correct at every icon size.
       parts.push(
-        el('div', {
-          position: 'absolute',
-          left: px(ex),
-          top: px(eyeY + S * 0.16),
-          width: px(w),
-          height: px(w * 0.85),
-          border: `${px(S * 0.032)} solid ${C.ink}`,
-          borderBottom: 'none',
-          borderRadius: `${px(S * 0.11)} ${px(S * 0.11)} 0 0`,
-        }),
+        el(
+          'div',
+          {
+            position: 'absolute',
+            left: px(ex),
+            // Centred on where the OPEN eye sits (its span is eyeY .. eyeY+0.31S), so
+            // the grin closes the eye in place. Sitting it lower drags the arcs down
+            // toward the beak, which reads as a scowl rather than a squeeze.
+            top: px(eyeY + S * 0.09),
+            width: px(w),
+            height: px(w * 0.42),
+          },
+          svg(
+            'svg',
+            { width: '100%', height: '100%', viewBox: '0 0 100 42', fill: 'none' },
+            // A gentle arc. Pulling the control point higher sharpens the peak into
+            // a "∧", which is how an angry brow is drawn — the difference between
+            // delighted and furious here is about fifteen units of control point.
+            svg('path', {
+              d: 'M8 30 Q50 12 92 30',
+              stroke: C.ink,
+              'stroke-width': 11,
+              'stroke-linecap': 'round',
+            }),
+          ),
+        ),
       );
       continue;
     }
