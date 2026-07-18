@@ -30,6 +30,7 @@ import { advanceStreak } from '../../core/streak.js';
 import { viewportPoints } from '../../viewport.js';
 import { tap, medium, rigid } from '../../haptics.js';
 import { flap, bounce, feather, thud, fanfare } from '../../sound.js';
+import { playBgm } from '../../music.js';
 
 const DEG = 180 / Math.PI;
 
@@ -288,6 +289,10 @@ export function gameScreen(go, arg) {
 
   // --- painting --------------------------------------------------------
   let pose = 'run';
+  /** Last biome the music was told to play, so the crossfade fires once per
+   *  boundary rather than 60×/s. `playBgm` is itself idempotent, but gating here
+   *  also skips its per-frame settings read. */
+  let musicBiome = '';
 
   function paint() {
     const h = viewportPoints().h;
@@ -390,6 +395,13 @@ export function gameScreen(go, arg) {
     // built near every boundary. See final-fixes report #5.
     const biome = biomeAtY(state.maxY);
     bg.setSky(biome.key);
+    // The soundtrack follows the sky: each biome's key IS its track basename, so
+    // crossfade to it as the player climbs into a new band. The launch sting
+    // (fired on the game→ navigation) plays over this first fade-in.
+    if (biome.key !== musicBiome) {
+      musicBiome = biome.key;
+      playBgm(biome.key);
+    }
     // The meter only exists in the final band: `tuning.truckHeightM` is the
     // live escape height (metres), already adjusted for the Low Ceiling daily
     // modifier — so `progress` tracks the actual truck, not a hardcoded 1200.

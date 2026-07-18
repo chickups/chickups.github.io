@@ -310,13 +310,13 @@ test('recordRun increments moddedWins only on a daily win, not a normal win or a
 });
 
 test('getSetting() filters a mixed blob: an unknown key is ignored, a non-boolean value falls back to default', () => {
-  // The exact shape an older build (with a since-removed `music` toggle) or a
-  // hand-edited value could leave behind. Kills a mutation that drops either half
-  // of readSettings's filter — the `settingAt(k)` check or the `typeof on ===
-  // 'boolean'` check.
+  // The exact shape an older build (with a since-removed `leftHanded` toggle) or
+  // a hand-edited value could leave behind. Kills a mutation that drops either
+  // half of readSettings's filter — the `settingAt(k)` check or the `typeof on
+  // === 'boolean'` check.
   resetStorage();
-  fakeStorage.setItem('chickup.settings', JSON.stringify({ music: true, haptics: 'yes' }));
-  assert.equal(getSetting('music'), false, 'music is not a real setting — must not resurrect as on');
+  fakeStorage.setItem('chickup.settings', JSON.stringify({ leftHanded: true, haptics: 'yes' }));
+  assert.equal(getSetting('leftHanded'), false, 'leftHanded is not a real setting — must not resurrect as on');
   assert.equal(getSetting('haptics'), true, '"yes" is not a boolean — must fall back to the true default');
 });
 

@@ -1,5 +1,6 @@
 .claude/worktrees/
 .DS_Store
+/tmp/
 node_modules/
 .playwright-mcp/
 # Controller's browser-verification scratch output. Deliberately NOT `*.png`:

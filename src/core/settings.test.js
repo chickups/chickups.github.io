@@ -3,23 +3,26 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SETTINGS, settingAt } from './settings.js';
 
-test('only the five toggles that actually do something ship (spec D8)', () => {
-  // Sound Effects is wired to src/sound.js's WebAudio engine, so it ships.
-  // Music (a loop, not an effect) is still out of scope, one language, no IAP,
-  // and a full-screen tap has nothing to mirror. A switch that does nothing is
-  // worse than no switch: the player concludes the mute is broken, or that the
-  // game is.
-  assert.deepEqual(SETTINGS.map((s) => s.key), ['haptics', 'sound', 'hints', 'motion', 'contrast']);
-  for (const banned of ['music', 'sfx', 'leftHanded', 'language', 'restore']) {
+test('only the seven toggles that actually do something ship (spec D8)', () => {
+  // The AUDIO group is all wired: Sound Effects to src/sound.js, and Music /
+  // Alternate Music to src/music.js's file-playback engine. One language, no
+  // IAP, and a full-screen tap has nothing to mirror. A switch that does
+  // nothing is worse than no switch: the player concludes the mute is broken,
+  // or that the game is.
+  assert.deepEqual(
+    SETTINGS.map((s) => s.key),
+    ['haptics', 'sound', 'music', 'altMusic', 'hints', 'motion', 'contrast'],
+  );
+  for (const banned of ['sfx', 'leftHanded', 'language', 'restore']) {
     assert.equal(settingAt(banned), null, `${banned} must not ship — D8`);
   }
 });
 
-test('every setting carries a label, a group and a boolean default', () => {
+test('every setting carries a label, a known group and a boolean default', () => {
   for (const s of SETTINGS) {
     assert.equal(typeof s.key, 'string');
     assert.ok(s.label.length > 0);
-    assert.equal(s.group, 'GAMEPLAY');
+    assert.ok(['GAMEPLAY', 'AUDIO'].includes(s.group), `${s.key} has an unknown group`);
     assert.equal(typeof s.def, 'boolean');
   }
 });
@@ -30,6 +33,10 @@ test('the defaults are the friendly ones', () => {
   // for anyone who asked the OS.
   assert.equal(settingAt('haptics')?.def, true);
   assert.equal(settingAt('sound')?.def, true);
+  // Music defaults ON (nothing is audible until the first tap unlocks audio
+  // anyway); Alternate Music defaults OFF — the primary recordings.
+  assert.equal(settingAt('music')?.def, true);
+  assert.equal(settingAt('altMusic')?.def, false);
   assert.equal(settingAt('hints')?.def, true);
   assert.equal(settingAt('motion')?.def, false);
   assert.equal(settingAt('contrast')?.def, false);

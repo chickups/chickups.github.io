@@ -3,7 +3,7 @@
    works offline permanently. Bump CACHE on every deploy to invalidate. */
 
 // Keep the suffix in sync with src/version.js APP_VERSION (shown in Settings).
-const CACHE = 'chickup-v13';
+const CACHE = 'chickup-v14';
 
 /** Everything needed to run with no network at all. */
 const PRECACHE = [
@@ -17,6 +17,7 @@ const PRECACHE = [
   './src/input.js',
   './src/haptics.js',
   './src/sound.js',
+  './src/music.js',
   './src/share.js',
   './src/core/tokens.js',
   './src/core/rng.js',

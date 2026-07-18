@@ -8,6 +8,9 @@ let screens = {};
 let host = null;
 /** @type {HTMLElement|null} */
 let current = null;
+/** Fired after every mount with (name, arg). One listener; see `onNavigate`. */
+/** @type {((name: string, arg?: any) => void)|null} */
+let navListener = null;
 
 /**
  * @param {HTMLElement} hostEl
@@ -16,6 +19,16 @@ let current = null;
 export function registerScreens(hostEl, map) {
   host = hostEl;
   screens = map;
+}
+
+/**
+ * Register the one navigation listener, fired after each screen mounts. Kept
+ * out of the screens themselves so cross-cutting concerns (music) live in one
+ * place and `router.js` stays a generic mounter. Render-only — never core.
+ * @param {(name: string, arg?: any) => void} fn
+ */
+export function onNavigate(fn) {
+  navListener = fn;
 }
 
 /**
@@ -33,4 +46,11 @@ export function go(name, arg) {
   }
   current = make(go, arg);
   /** @type {HTMLElement} */ (host).appendChild(current);
+  if (navListener) {
+    try {
+      navListener(name, arg);
+    } catch {
+      // a listener fault (e.g. audio) must never abort a navigation
+    }
+  }
 }

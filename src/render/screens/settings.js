@@ -8,6 +8,7 @@ import { getEquippedOutfit, getSetting, setSetting } from '../../storage.js';
 import { setReducedMotion } from '../styles.js';
 import { applyContrast } from '../contrast.js';
 import { APP_VERSION, BUILD_DATE } from '../../version.js';
+import { setMusicEnabled, reloadVariant } from '../../music.js';
 
 /** Cache name prefix owned by this app; see sw.js. */
 const CACHE_PREFIX = 'chickup-';
@@ -54,18 +55,22 @@ async function reloadApp() {
 /**
  * Everything a toggle does the instant it flips, beyond being stored.
  *
- * `haptics` and `hints` are absent on purpose and that is not an oversight:
- * `haptics.js` asks `getSetting('haptics')` inside `buzz` on every call, and
- * `game.js` reads `getSetting('hints')` when a run starts — both read the store
- * directly, so storing the value IS the effect. `contrast` (doc §07, spec
- * Component 8) is the odd one out: its effect is a document-level attribute
- * rather than a value read at use-time, so it is applied here like `motion`.
+ * `haptics`, `sound` and `hints` are absent on purpose and that is not an
+ * oversight: `haptics.js` and `sound.js` ask `getSetting(...)` on every buzz /
+ * effect, and `game.js` reads `getSetting('hints')` when a run starts — all
+ * read the store directly, so storing the value IS the effect. The rest need an
+ * active nudge because their effect is state held elsewhere, not a value read
+ * at use-time: `motion`/`contrast` a document-level attribute, and `music` a
+ * persistent looping element that must be paused/resumed now (`setMusicEnabled`)
+ * or re-pointed at the other variant now (`reloadVariant`).
  *
  * @type {Record<string, (on: boolean) => void>}
  */
 const EFFECTS = {
   motion: (on) => setReducedMotion(on),
   contrast: (on) => applyContrast(on),
+  music: (on) => setMusicEnabled(on),
+  altMusic: () => reloadVariant(),
 };
 
 /**
