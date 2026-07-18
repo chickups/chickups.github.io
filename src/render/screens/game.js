@@ -175,7 +175,7 @@ export function gameScreen(go, arg) {
   if (ghostEl) world.appendChild(ghostEl);   // before peepEl — zIndex 5 sits under Peep's 6
   world.appendChild(peepEl);
 
-  const hud = makeHud(() => go('pause', { state, seed }));
+  const hud = makeHud(() => go('pause', { state, seed, tutorial }));
   const bg = gamebg(world);
   const root = el('div', { position: 'absolute', inset: '0px', cursor: 'pointer' },
     bg.root, hud.root);

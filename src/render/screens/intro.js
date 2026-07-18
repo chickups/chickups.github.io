@@ -2,7 +2,7 @@
 import { el, px } from '../el.js';
 import { peep } from '../art/peep.js';
 import { truck } from '../art/truck.js';
-import { markIntroSeen } from '../../storage.js';
+import { markIntroSeen, hasSeenTutorial } from '../../storage.js';
 import { TAP_MIN } from '../ui.js';
 
 const CAPTIONS = ['Peep was a little late.', 'Everyone had already left.', 'Time to catch up.'];
@@ -20,7 +20,8 @@ export function introScreen(go) {
 
   const done = () => {
     markIntroSeen();
-    go('home');
+    if (hasSeenTutorial()) go('home');
+    else go('game', { tutorial: true });
   };
 
   const doorway = el('div', {
