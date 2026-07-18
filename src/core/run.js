@@ -43,6 +43,24 @@ export function rateOf(kind) {
 }
 
 /**
+ * How good launching THIS frame is, 0–1: the fraction of launch speed that points
+ * up (max height gained). Pure and read-only — the render layer uses it to pulse a
+ * "tap now" cue that peaks at the ideal moment. 0 when not orbiting. Computed from
+ * the launch vector, so a gear's reversed rate is handled correctly (its ideal
+ * angle differs from a tire's).
+ * @param {{phase?:string, wheelIndex?:number, angle?:number}} state
+ * @param {{propAt:(i:number)=>{kind:string}}} field
+ * @returns {number}
+ */
+export function launchQuality(state, field) {
+  if (state.phase !== 'orbit') return 0;
+  const wheel = field.propAt(state.wheelIndex ?? 0);
+  const v = launchVelocity(state.angle ?? 0, rateOf(wheel.kind), radiusOf(wheel.kind), PHYSICS.launchBoost);
+  const speed = Math.hypot(v.x, v.y);
+  return speed === 0 ? 0 : Math.max(0, v.y / speed);
+}
+
+/**
  * @typedef {Object} RunState
  * @property {'orbit'|'fly'|'dead'|'won'} phase
  * @property {number} wheelIndex   wheel currently orbited (meaningless while flying)

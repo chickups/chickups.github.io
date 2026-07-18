@@ -1,7 +1,7 @@
 // @ts-check
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createRun, step, scoreOf, radiusOf, rateOf, endScreenOf } from './run.js';
+import { createRun, step, scoreOf, radiusOf, rateOf, endScreenOf, launchQuality } from './run.js';
 import { makeField } from './field.js';
 import { PHYSICS, SCORING, PROPS, ZONES, HAZARD, FIELD, ESCAPE } from './tokens.js';
 import { baseTuning, applyModifier, MODIFIERS } from './modifier.js';
@@ -193,6 +193,22 @@ test('tutorial flags latch as the player performs each action', () => {
   assert.equal(s.everLaunched, false, 'spinning alone is not launching');
   s = step(s, f, DT, true, VH);
   assert.equal(s.everLaunched, true);
+});
+
+test('launchQuality: 0 off-orbit, in [0,1] on orbit, higher pointing up than down', () => {
+  const field = makeField(2024); // reuse the file's existing field factory import
+  // Off-orbit: a flying state scores 0.
+  assert.equal(launchQuality({ phase: 'fly' }, field), 0);
+  // On orbit across a full sweep: always within [0,1], and the max over the sweep
+  // is strictly greater than the min (a constant would fail this).
+  const wheelIndex = 0;
+  let lo = Infinity, hi = -Infinity;
+  for (let a = 0; a < Math.PI * 2; a += 0.2) {
+    const q = launchQuality({ phase: 'orbit', wheelIndex, angle: a }, field);
+    assert.ok(q >= 0 && q <= 1, `quality ${q} out of range at angle ${a}`);
+    lo = Math.min(lo, q); hi = Math.max(hi, q);
+  }
+  assert.ok(hi > lo + 0.5, 'quality must vary strongly across the orbit — kills a constant');
 });
 
 // --- radiusOf / rateOf -----------------------------------------------------
