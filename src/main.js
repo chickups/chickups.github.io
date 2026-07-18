@@ -21,6 +21,7 @@ import { achievementsScreen } from './render/screens/achievements.js';
 import { settingsScreen } from './render/screens/settings.js';
 import { dailyScreen } from './render/screens/daily.js';
 import { raceScreen } from './render/screens/race.js';
+import { howtoScreen } from './render/screens/howto.js';
 
 // No browser context menu anywhere: a right-click on desktop or a long-press on
 // touch would otherwise raise it mid-run, over a game whose only verb is a tap.
@@ -61,6 +62,7 @@ registerScreens(stage, {
   settings: settingsScreen,
   daily: dailyScreen,
   race: raceScreen,
+  howto: howtoScreen,
 });
 
 go('splash');

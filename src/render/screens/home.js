@@ -88,6 +88,7 @@ export function homeScreen(go) {
       el(
         'div',
         { display: 'flex', gap: px(8) },
+        iconButton('hand', () => go('howto'), { color: COLORS.orangeD }),
         iconButton('map', () => go('journey'), { color: COLORS.orangeD }),
         iconButton('shirt', () => go('shop'), { color: COLORS.orangeD }),
         iconButton('trophy', () => go('achievements'), { color: COLORS.orangeD }),
