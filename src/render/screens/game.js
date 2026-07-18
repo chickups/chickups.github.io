@@ -11,7 +11,7 @@ import { updraft } from '../art/updraft.js';
 import { makeField } from '../../core/field.js';
 import { makeZones, truckX, truckTelling } from '../../core/zones.js';
 import { biomeAtY, biomeIndexAtY } from '../../core/biome.js';
-import { createRun, step, scoreOf, radiusOf, isLive, endScreenOf } from '../../core/run.js';
+import { createRun, step, scoreOf, radiusOf, isLive, endScreenOf, launchQuality } from '../../core/run.js';
 import { PHYSICS, SCORING, COLORS, PROPS, HAZARD, ZONES, RACE } from '../../core/tokens.js';
 import { modifierForDay, applyModifier, baseTuning } from '../../core/modifier.js';
 import { makeInput } from '../../input.js';
@@ -159,7 +159,19 @@ export function gameScreen(go, arg) {
         }, `BEST ${best}`),
       )
     : null;
+  // Tutorial-only timing cue: a glow on the orbited tire that brightens toward
+  // the ideal launch angle, driven each frame from the pure `launchQuality`
+  // helper. Never built outside a tutorial run — `cueEl` stays `null` and every
+  // per-frame branch below is guarded on it, so a normal run pays nothing.
+  const cueEl = tutorial
+    ? el('div', {
+        position: 'absolute', left: '0px', top: '0px', borderRadius: '50%',
+        boxShadow: `0 0 0 ${px(4)} ${COLORS.gold}, 0 0 ${px(22)} ${px(8)} ${COLORS.gold}`,
+        opacity: '0', pointerEvents: 'none', zIndex: '4', willChange: 'transform,opacity',
+      })
+    : null;
   if (bestLine) world.appendChild(bestLine);
+  if (cueEl) world.appendChild(cueEl);       // under peepEl (zIndex 6) and ghostEl (zIndex 5)
   if (ghostEl) world.appendChild(ghostEl);   // before peepEl — zIndex 5 sits under Peep's 6
   world.appendChild(peepEl);
 
@@ -323,6 +335,26 @@ export function gameScreen(go, arg) {
     }
     peepEl.style.transform =
       `translate(${px(state.x - PHYSICS.peepSize / 2)},${px(-state.y - PHYSICS.peepSize / 2)}) rotate(${rotation}deg)`;
+
+    // Timing cue: only before graduation, and only while actually orbiting a
+    // wheel — launchQuality returns 0 outside 'orbit' but the phase check here
+    // also gates which wheel's position is read (state.wheelIndex is stale/
+    // meaningless while flying).
+    if (cueEl) {
+      const q = grabs < GRAD_GRABS ? launchQuality(state, field) : 0;
+      if (q > 0 && state.phase === 'orbit') {
+        const wheel = field.propAt(state.wheelIndex);
+        const d = radiusOf(wheel.kind) * 2;
+        cueEl.style.width = px(d);
+        cueEl.style.height = px(d);
+        // Same sign convention as peepEl above: world scrolls up, so screen y is
+        // -wheel.y.
+        cueEl.style.transform = `translate(${px(wheel.x - d / 2)},${px(-wheel.y - d / 2)})`;
+        cueEl.style.opacity = String(Math.min(1, q));   // brightest at the top of the swing
+      } else {
+        cueEl.style.opacity = '0';
+      }
+    }
 
     if (ghostEl && ghostState) {
       // Hidden once dead rather than left lying at its last position, where it
