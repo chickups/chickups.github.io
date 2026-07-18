@@ -113,16 +113,23 @@ export function settingsScreen(go) {
         'div',
         {
           background: COLORS.cream, borderRadius: px(24),
-          padding: `${px(6)} ${px(16)}`, boxShadow: '0 6px 0 rgba(75,53,36,.12)',
+          padding: `${px(4)} ${px(16)}`, boxShadow: '0 6px 0 rgba(75,53,36,.12)',
         },
-        ...SETTINGS.filter((s) => s.group === group).map((s) =>
-          toggleRow(s.label, getSetting(s.key), (next) => {
-            setSetting(s.key, next);
-            const effect = EFFECTS[s.key];
-            if (effect) effect(next);
-            refresh();
-          }),
-        ),
+        // Flat rows separated by hairline dividers — one card, a clean list.
+        ...SETTINGS.filter((s) => s.group === group)
+          .map((s) =>
+            toggleRow(s.label, getSetting(s.key), (next) => {
+              setSetting(s.key, next);
+              const effect = EFFECTS[s.key];
+              if (effect) effect(next);
+              refresh();
+            }),
+          )
+          .flatMap((row, i, arr) =>
+            i < arr.length - 1
+              ? [row, el('div', { height: '1px', background: 'rgba(75,53,36,.09)', margin: `0 ${px(4)}` })]
+              : [row],
+          ),
       ),
     ),
   );

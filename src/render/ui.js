@@ -324,8 +324,6 @@ export function progressBar(value, max, opts = {}) {
   );
 }
 
-const TOGGLE_SHADOW = `0 ${px(4)} 0 rgba(75,53,36,.1)`;
-const TOGGLE_SHADOW_PRESSED = '0 0px 0 rgba(75,53,36,.1)';
 
 /**
  * §11's Toggle. §07 requires that state is NOT carried by colour alone, so the
@@ -373,17 +371,17 @@ export function toggleRow(label, isOn, onChange) {
       minHeight: px(TAP_MIN),
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       gap: px(12),
-      background: COLORS.cream,
-      borderRadius: px(20),
-      padding: `${px(8)} ${px(14)}`,
+      padding: `${px(4)} ${px(6)}`,
       cursor: 'pointer',
-      boxShadow: TOGGLE_SHADOW,
-      transition: 'transform .08s, box-shadow .08s',
     },
     el('div', { font: `800 ${px(16)} 'Baloo 2'`, color: COLORS.ink }, label),
     track,
   );
-  pressable(node, 4, TOGGLE_SHADOW, TOGGLE_SHADOW_PRESSED, () => onChange(!isOn));
+  // A flat list row, NOT a card. The parent group card is the only card, so rows
+  // sit inside it as a clean list instead of stacking their own card-shadows into
+  // a staircase (which is what made the settings menu look messy). No press lip —
+  // the switch flipping to ON/OFF on the re-render is the feedback.
+  pressable(node, 0, 'none', 'none', () => onChange(!isOn));
   return node;
 }
 
