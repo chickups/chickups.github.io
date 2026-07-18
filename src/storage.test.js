@@ -289,6 +289,24 @@ test('recordRun increments wins only when won is true', () => {
   assert.equal(getStats().wins, 1); // a loss must NOT increment — kills "always ++"
 });
 
+test('recordRun accumulates lifetime totalMetres across runs', () => {
+  resetStorage();
+  recordRun({ metres: 300, feathers: 0, maxChain: 1, biomeIndex: 1, won: false });
+  assert.equal(getStats().totalMetres, 300);
+  recordRun({ metres: 450, feathers: 0, maxChain: 1, biomeIndex: 2, won: false });
+  assert.equal(getStats().totalMetres, 750); // sums, not max — kills "Math.max" mutation
+});
+
+test('recordRun increments moddedWins only on a daily win, not a normal win or a daily loss', () => {
+  resetStorage();
+  recordRun({ metres: 1200, feathers: 0, maxChain: 1, biomeIndex: 5, won: true, daily: false });
+  assert.equal(getStats().moddedWins, 0); // a NON-daily win must not count
+  recordRun({ metres: 900, feathers: 0, maxChain: 1, biomeIndex: 4, won: false, daily: true });
+  assert.equal(getStats().moddedWins, 0); // a daily LOSS must not count
+  recordRun({ metres: 1200, feathers: 0, maxChain: 1, biomeIndex: 5, won: true, daily: true });
+  assert.equal(getStats().moddedWins, 1); // only daily AND won increments
+});
+
 test('getSetting() filters a mixed blob: an unknown key is ignored, a non-boolean value falls back to default', () => {
   // The exact shape an older build (with a since-removed `music` toggle) or a
   // hand-edited value could leave behind. Kills a mutation that drops either half

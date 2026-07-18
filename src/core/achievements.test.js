@@ -4,9 +4,9 @@ import assert from 'node:assert/strict';
 import { ACHIEVEMENTS, evaluate, earnedCount, pendingUnlocks } from './achievements.js';
 import { BIOMES } from './biome.js';
 
-test('ACHIEVEMENTS is a frozen array of 6-14 entries with unique keys', () => {
+test('ACHIEVEMENTS is a frozen array of 6-24 entries with unique keys', () => {
   assert.ok(Object.isFrozen(ACHIEVEMENTS));
-  assert.ok(ACHIEVEMENTS.length >= 6 && ACHIEVEMENTS.length <= 14, `expected 6-14, got ${ACHIEVEMENTS.length}`);
+  assert.ok(ACHIEVEMENTS.length >= 6 && ACHIEVEMENTS.length <= 24, `expected 6-24, got ${ACHIEVEMENTS.length}`);
   const keys = ACHIEVEMENTS.map((a) => a.key);
   assert.equal(new Set(keys).size, keys.length, 'achievement keys must be unique');
   for (const a of ACHIEVEMENTS) {
@@ -49,12 +49,34 @@ test('a maxed-out lifetime stat block earns every achievement', () => {
     maxChain: 1e6,
     biomesReached: BIOMES.length,
     wins: 1e6,
+    moddedWins: 1e6,
+    totalMetres: 1e6,
   };
   const results = evaluate(maxed);
   for (const r of results) {
     assert.equal(r.done, true, `${r.key} should be earned by a maxed-out player`);
   }
   assert.equal(earnedCount(maxed), ACHIEVEMENTS.length);
+});
+
+test('the seven slice-5 achievements track their exact stat thresholds', () => {
+  const base = { bestMetres: 0, totalFeathers: 0, runs: 0, maxChain: 0, biomesReached: 0, wins: 0, moddedWins: 0, totalMetres: 0 };
+  const keys = (s) => evaluate({ ...base, ...s }).filter((r) => r.done).map((r) => r.key);
+  // Each pair asserts BOTH sides of the boundary — a threshold set one-off would fail one side.
+  assert.ok(!keys({ bestMetres: 999 }).includes('reach-escape'));
+  assert.ok(keys({ bestMetres: 1000 }).includes('reach-escape'));
+  assert.ok(!keys({ wins: 49 }).includes('escape-artist'));
+  assert.ok(keys({ wins: 50 }).includes('escape-artist'));
+  assert.ok(!keys({ runs: 99 }).includes('centurion'));
+  assert.ok(keys({ runs: 100 }).includes('centurion'));
+  assert.ok(!keys({ maxChain: 29 }).includes('unbroken'));
+  assert.ok(keys({ maxChain: 30 }).includes('unbroken'));
+  assert.ok(!keys({ totalFeathers: 9999 }).includes('feather-tycoon'));
+  assert.ok(keys({ totalFeathers: 10000 }).includes('feather-tycoon'));
+  assert.ok(!keys({ moddedWins: 0 }).includes('against-odds'));
+  assert.ok(keys({ moddedWins: 1 }).includes('against-odds'));
+  assert.ok(!keys({ totalMetres: 24999 }).includes('frequent-flyer'));
+  assert.ok(keys({ totalMetres: 25000 }).includes('frequent-flyer'));
 });
 
 test('earnedCount matches the number of done:true entries evaluate returns', () => {
@@ -90,7 +112,7 @@ test('pendingUnlocks never reports an unearned achievement', () => {
 test('pendingUnlocks returns ACHIEVEMENTS order, not the order of `seen`', () => {
   // The toast queue shows these in the order returned. That order must come from the
   // table, not from however the caller's storage happened to serialise its keys.
-  const all = { bestMetres: 9999, totalFeathers: 9999, runs: 9999, maxChain: 9999, biomesReached: BIOMES.length, wins: 9999 };
+  const all = { bestMetres: 1e6, totalFeathers: 1e6, runs: 1e6, maxChain: 1e6, biomesReached: BIOMES.length, wins: 1e6, moddedWins: 1e6, totalMetres: 1e6 };
   const table = ACHIEVEMENTS.map((a) => a.key);
   assert.deepEqual(pendingUnlocks(all, []).map((a) => a.key), table);
   // Same query, but `seen` mentions a later key first — must not perturb the result.

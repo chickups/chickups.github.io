@@ -16,6 +16,8 @@ import { BIOMES } from './biome.js';
  * @property {number} maxChain
  * @property {number} biomesReached
  * @property {number} wins
+ * @property {number} moddedWins  lifetime wins on a daily (modified) run
+ * @property {number} totalMetres lifetime metres climbed, summed over every run
  */
 
 /** @typedef {{key:string, name:string, hint:string, done:(s:Stats)=>boolean}} Achievement */
@@ -44,6 +46,8 @@ function normalize(stats) {
     maxChain: num(s.maxChain),
     biomesReached: num(s.biomesReached),
     wins: num(s.wins),
+    moddedWins: num(s.moddedWins),
+    totalMetres: num(s.totalMetres),
   };
 }
 
@@ -119,6 +123,48 @@ export const ACHIEVEMENTS = Object.freeze([
     name: 'Feather Baron',
     hint: 'Earn 5000 feathers all-time',
     done: (s) => s.totalFeathers >= 5000,
+  }),
+  Object.freeze({
+    key: 'reach-escape',
+    name: 'So Close',
+    hint: 'Reach The Great Escape (1000m) in a single run.',
+    done: (s) => s.bestMetres >= 1000,
+  }),
+  Object.freeze({
+    key: 'escape-artist',
+    name: 'Escape Artist',
+    hint: 'Catch the escape truck 50 times.',
+    done: (s) => s.wins >= 50,
+  }),
+  Object.freeze({
+    key: 'centurion',
+    name: 'Centurion',
+    hint: 'Play 100 runs.',
+    done: (s) => s.runs >= 100,
+  }),
+  Object.freeze({
+    key: 'unbroken',
+    name: 'Unbroken',
+    hint: 'Chain 30 grabs in a row.',
+    done: (s) => s.maxChain >= 30,
+  }),
+  Object.freeze({
+    key: 'feather-tycoon',
+    name: 'Feather Tycoon',
+    hint: 'Bank 10000 feathers over your lifetime.',
+    done: (s) => s.totalFeathers >= 10000,
+  }),
+  Object.freeze({
+    key: 'against-odds',
+    name: 'Against the Odds',
+    hint: 'Win a Daily Run under its modifier.',
+    done: (s) => s.moddedWins >= 1,
+  }),
+  Object.freeze({
+    key: 'frequent-flyer',
+    name: 'Frequent Flyer',
+    hint: 'Climb 25000m over your lifetime.',
+    done: (s) => s.totalMetres >= 25000,
   }),
 ]);
 

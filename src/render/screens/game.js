@@ -319,7 +319,10 @@ export function gameScreen(go, arg) {
     if (ghostEl && ghostState) {
       // Hidden once dead rather than left lying at its last position, where it
       // would read as a live rival standing still.
-      ghostEl.style.display = (ghostState.phase === 'dead' || state.phase === 'won') ? 'none' : 'block';
+      // Hide the ghost once it is no longer live — dead OR won. A ghost recorded
+      // from a winning run reaches the truck and stops; `!isLive` covers both so it
+      // never freezes on screen (a bare `=== 'dead'` left a winning ghost stuck).
+      ghostEl.style.display = (!isLive(ghostState.phase) || state.phase === 'won') ? 'none' : 'block';
       const gRot = ghostState.phase === 'orbit'
         ? -ghostState.angle * DEG
         : Math.atan2(ghostState.vx, ghostState.vy) * DEG;
@@ -453,6 +456,9 @@ export function gameScreen(go, arg) {
         // live HUD actually showed, not a start-relative reading of it.
         biomeIndex: biomeIndexAtY(state.maxY),
         won: state.phase === 'won',
+        // A daily run always carries a modifier, so a daily win is a "modded win"
+        // for the Against the Odds achievement.
+        daily,
       });
 
       // A race prize is EARNED feathers: it must count toward lifetime totals and
@@ -468,13 +474,16 @@ export function gameScreen(go, arg) {
         // is idempotent for the same day, so a second run today is free of charge
         // and costs nothing to call unconditionally here.
         setStreak(advanceStreak(getStreak(), day));
-      } else if (metres > best) {
-        // Store the recording only when the run is the new best — the ghost IS
-        // the best run. `metres > best` is the same comparison the New Best
-        // screen makes below, deliberately: the two must never disagree about
-        // which run was the best one. Restricted to non-daily runs: a Ghost
-        // carries no tuning, so only a baseTuning() run (never a modified daily
-        // one) can ever be replayed back with the tuning it was recorded under.
+      } else if (metres > best || (!getGhost() && metres > 0)) {
+        // Store the recording when the run is the new best — the ghost IS the best
+        // run. `metres > best` is the same comparison the New Best screen makes
+        // below, deliberately: the two must never disagree about which run was the
+        // best one. The `!getGhost()` clause is a bootstrap: a player who has a best
+        // from before ghosts existed (or whose ghost was cleared) would otherwise
+        // never have anything to race until they beat that best — so any first real
+        // run self-heals a missing ghost. Restricted to non-daily runs: a Ghost
+        // carries no tuning, so only a baseTuning() run (never a modified daily one)
+        // can ever be replayed back with the tuning it was recorded under.
         setGhost(recorder.finish(metres));
       }
 

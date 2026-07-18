@@ -19,6 +19,10 @@ const K = {
   statMaxChain: 'chickup.stat.maxChain',
   statBiomesReached: 'chickup.stat.biomesReached',
   statWins: 'chickup.stat.wins',
+  // Lifetime wins on a daily (modified) run, and lifetime metres climbed summed
+  // over every run — both feed achievements, both updated only by recordRun.
+  statModdedWins: 'chickup.stat.moddedWins',
+  statTotalMetres: 'chickup.stat.totalMetres',
   // Lifetime feathers ever earned. Deliberately separate from `feathers` (the
   // spendable balance): spending in the shop must not un-earn a feather achievement.
   statTotalFeathers: 'chickup.stat.totalFeathers',
@@ -240,6 +244,8 @@ export function getStats() {
     maxChain: readNumber(K.statMaxChain, 0),
     biomesReached: readNumber(K.statBiomesReached, 0),
     wins: readNumber(K.statWins, 0),
+    moddedWins: readNumber(K.statModdedWins, 0),
+    totalMetres: readNumber(K.statTotalMetres, 0),
   };
 }
 
@@ -248,9 +254,9 @@ export function getStats() {
  * spendable feather balance, and every lifetime stat achievements read. This is
  * the single call site meant to replace ad hoc `setBest`/`addFeathers` calls at
  * the end of a run — calling both that and this would double-credit feathers.
- * @param {{metres: number, feathers: number, maxChain: number, biomeIndex: number, won: boolean}} run
+ * @param {{metres: number, feathers: number, maxChain: number, biomeIndex: number, won: boolean, daily: boolean}} run
  */
-export function recordRun({ metres, feathers, maxChain, biomeIndex, won = false }) {
+export function recordRun({ metres, feathers, maxChain, biomeIndex, won = false, daily = false }) {
   setBest(metres);
   addFeathers(feathers);
   write(K.statRuns, String(readNumber(K.statRuns, 0) + 1));
@@ -259,6 +265,8 @@ export function recordRun({ metres, feathers, maxChain, biomeIndex, won = false 
   const reached = Math.max(0, Math.floor(biomeIndex) + 1);
   write(K.statBiomesReached, String(Math.max(readNumber(K.statBiomesReached, 0), reached)));
   write(K.statWins, String(readNumber(K.statWins, 0) + (won ? 1 : 0)));
+  write(K.statTotalMetres, String(readNumber(K.statTotalMetres, 0) + Math.max(0, Math.floor(metres))));
+  write(K.statModdedWins, String(readNumber(K.statModdedWins, 0) + (won && daily ? 1 : 0)));
 }
 
 /**
