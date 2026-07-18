@@ -7,6 +7,7 @@ import { SETTINGS } from '../../core/settings.js';
 import { getEquippedOutfit, getSetting, setSetting } from '../../storage.js';
 import { setReducedMotion } from '../styles.js';
 import { applyContrast } from '../contrast.js';
+import { APP_VERSION, BUILD_DATE } from '../../version.js';
 
 /** Cache name prefix owned by this app; see sw.js. */
 const CACHE_PREFIX = 'chickup-';
@@ -154,6 +155,12 @@ export function settingsScreen(go) {
         }, 'Chick Up keeps itself on your phone so it works with no signal. If you are not seeing the newest version, clear it and fetch again.'),
         reload,
         status,
+        // The running build's identity. If this looks old after a reload, the
+        // service worker is still serving a cached bundle — tap Reload above.
+        el('div', {
+          font: `700 ${px(12)} 'Nunito'`, color: COLORS.muted,
+          margin: `${px(14)} 0 0`, textAlign: 'center', letterSpacing: '.02em',
+        }, `Chick Up ${APP_VERSION} · built ${BUILD_DATE}`),
       ),
 
       el('div', { flex: '1', minHeight: px(20) }),

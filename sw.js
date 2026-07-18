@@ -2,7 +2,8 @@
 /* Service worker. Cache-first: the game is fully static, so once installed it
    works offline permanently. Bump CACHE on every deploy to invalidate. */
 
-const CACHE = 'chickup-v12';
+// Keep the suffix in sync with src/version.js APP_VERSION (shown in Settings).
+const CACHE = 'chickup-v13';
 
 /** Everything needed to run with no network at all. */
 const PRECACHE = [
@@ -10,6 +11,7 @@ const PRECACHE = [
   './index.html',
   './manifest.webmanifest',
   './src/main.js',
+  './src/version.js',
   './src/viewport.js',
   './src/storage.js',
   './src/input.js',
