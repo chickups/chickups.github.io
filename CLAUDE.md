@@ -28,7 +28,7 @@ thing to forget.
 
     src/core/     pure: math, seeded RNG, zero DOM. Ports to Swift 1:1.
     src/render/   DOM + CSS. Disposable; becomes SwiftUI in the native port.
-    src/*.js      the impure shell: storage, input, haptics, viewport, main wiring.
+    src/*.js      the impure shell: storage, input, haptics, sound, music, viewport, main wiring.
 
 `src/core/` must **never** import from `src/render/`, touch `document`/`window`,
 or call `Math.random()`. Those three prohibitions are what make the native port a
