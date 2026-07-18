@@ -10,7 +10,7 @@ const POSES = ['idle', 'frightened', 'run'];
 const BEAT_MS = 1500;
 
 /**
- * @param {(name: string) => void} go
+ * @param {(name: string, arg?: any) => void} go
  * @returns {HTMLElement}
  */
 export function introScreen(go) {
