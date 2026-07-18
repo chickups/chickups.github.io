@@ -13,7 +13,7 @@
  */
 
 /** Matches sw.js `CACHE = 'chickup-<APP_VERSION>'`. */
-export const APP_VERSION = 'v15';
+export const APP_VERSION = 'v16';
 
 /** Deploy date, YYYY-MM-DD. */
 export const BUILD_DATE = '2026-07-18';

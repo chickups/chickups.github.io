@@ -73,14 +73,21 @@ every visitor with no server).
 
 ## The manager: `src/music.js`
 
-Two channels over plain `<audio>` elements (no Web Audio API needed):
+Two plain `<audio>` elements (no Web Audio API needed), and — crucially — only
+ONE music track is ever audible at a time:
 
-- **bgm channel** — a 2-element pool. `playBgm(name)` crossfades: the incoming
-  element fades in while the outgoing fades out over ~0.8 s by ramping `.volume`
-  on a timer. Loops (`.loop = true`). A no-op if `name` is already the active
-  bgm.
-- **sting channel** — one `<audio>`. `playSting(name)` plays a one-shot and
-  ducks the bgm briefly, restoring volume when it ends.
+- **bgm channel** — a SINGLE looping element. `playBgm(name)` fades the current
+  track out, swaps the source, and fades the new one in on that same element, so
+  two beds can never sound together. A no-op if `name` is already active.
+- **sting channel** — one `<audio>` for the short flourishes. `playSting(name)`
+  PAUSES the loop for the sting's duration and resumes the intended loop when it
+  ends — a sting and a loop never overlap either.
+
+> Revised from the first implementation, which crossfaded a **2-element pool**
+> and layered stings *under* the bgm (ducking). With full loudnorm'd songs that
+> put up to three tracks together and read as noise; playtest feedback was "a lot
+> of music plays at the same time." The single-element + pause-the-loop model
+> above is the fix.
 
 Path resolution: `audio/${variant}/${name}.mp3` where
 `variant = getSetting('altMusic') ? 'b' : 'a'`. Elements use `preload="none"`
