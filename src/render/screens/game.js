@@ -20,9 +20,10 @@ import {
   getBest, recordRun, getEquippedOutfit, setDailyBest,
   getStats, getSeenAchievements, markAchievementsSeen, checkMilestones,
   getStreak, setStreak, getSetting, getGhost, setGhost, earnFeathers,
+  markTutorialSeen,
 } from '../../storage.js';
 import { pendingUnlocks } from '../../core/achievements.js';
-import { toastAchievement } from '../toast.js';
+import { toastAchievement, toastMessage } from '../toast.js';
 import { queueReward } from './reward.js';
 import { dayNumber, dailySeed } from '../../core/daily.js';
 import { advanceStreak } from '../../core/streak.js';
@@ -59,6 +60,13 @@ export function gameScreen(go, arg) {
   // pure function of its seed, so every player gets the same route with no
   // server involved. Only a leaderboard would need one.
   const daily = Boolean(arg && arg.daily);
+  // A tutorial run is a guided PRACTICE run: it narrates the loop with callouts,
+  // forgives an early death by restarting, and graduates to normal play after
+  // GRAD_GRABS grabs. It must touch NO stats — see the tutorial branch in the
+  // run-end block below.
+  const tutorial = !!(arg && arg.tutorial);
+  const GRAD_GRABS = 2;      // grabs needed before the tutorial "graduates" to normal play
+  let grabs = 0;             // grabs made this run (fly → orbit rising edges)
   // Prefer the day the Daily screen already computed and passed in. Reading the
   // clock fresh here would let a dwell across local midnight play a different
   // route/modifier than the one the screen advertised. A plain run has no
@@ -333,7 +341,12 @@ export function gameScreen(go, arg) {
     // Tutorial Hints off means no bubble at all. `hud.update` already treats an
     // empty string as "hide the bubble", so this needs no HUD change.
     let tip = '';
-    if (hints) {
+    if (tutorial) {
+      if (grabs >= GRAD_GRABS) tip = 'You’ve got it — climb to catch the truck at the top!';
+      else if (!state.everLaunched) tip = 'Tap at the top of the swing to launch.';
+      else if (!state.everGrabbed) tip = 'Now drop onto the next tire!';
+      else tip = 'Nice! Land again to chain — each grab’s a feather.';
+    } else if (hints) {
       if (!state.everLaunched) tip = TIP_TAP;
       else if (!state.everGrabbed) tip = TIP_LAND;
     }
@@ -418,7 +431,7 @@ export function gameScreen(go, arg) {
       }
 
       if (state.phase === 'fly' && prevPhase === 'orbit') medium();
-      if (state.phase === 'orbit' && prevPhase === 'fly') { tap(); flap(); }
+      if (state.phase === 'orbit' && prevPhase === 'fly') { tap(); flap(); grabs++; }
       prevPhase = state.phase;
 
       if (state.lockPad >= 0 && state.lockPad !== prevLockPad) bounce();
@@ -444,6 +457,22 @@ export function gameScreen(go, arg) {
       // and a truck hit both end the run the same unhappy way.
       if (state.phase === 'dead') thud();
       if (state.phase === 'won') fanfare();
+
+      if (tutorial) {
+        // Practice: no stats, feathers, ghost, best, daily, or achievements.
+        if (grabs < GRAD_GRABS) {
+          // Forgiveness: an early death restarts the guided run instead of a death screen.
+          toastMessage('Let’s try that again');
+          go('game', { tutorial: true });
+        } else {
+          // Graduated: they can do the loop. End practice and hand off to Home.
+          markTutorialSeen();
+          toastMessage('You’re ready — go for it!');
+          go('home');
+        }
+        return;
+      }
+
       const metres = scoreOf(state);
       // recordRun does setBest and addFeathers itself. Calling those here too
       // would credit the feathers twice — addFeathers is not idempotent.
