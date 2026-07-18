@@ -9,6 +9,7 @@ const K = {
   best: 'chickup.best',
   feathers: 'chickup.feathers',
   seenIntro: 'chickup.seenIntro',
+  seenTutorial: 'chickup.seenTutorial',
   outfitsOwned: 'chickup.outfitsOwned',
   outfitEquipped: 'chickup.outfitEquipped',
   // The daily best is stored per day number, so yesterday's score never leaks
@@ -172,6 +173,14 @@ export const hasSeenIntro = () => readNumber(K.seenIntro, 0) === 1;
 
 export function markIntroSeen() {
   write(K.seenIntro, '1');
+}
+
+/** @returns {boolean} */
+export const hasSeenTutorial = () => readNumber(K.seenTutorial, 0) === 1;
+
+/** Record that the guided first run has been completed or skipped. */
+export function markTutorialSeen() {
+  write(K.seenTutorial, '1');
 }
 
 /**

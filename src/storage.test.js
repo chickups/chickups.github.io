@@ -53,6 +53,8 @@ import {
   setSetting,
   getFeathers,
   earnFeathers,
+  hasSeenTutorial,
+  markTutorialSeen,
 } from './storage.js';
 
 /** Reset the stub between tests so each test starts from a clean, empty store. */
@@ -334,4 +336,11 @@ test('a race prize via earnFeathers can trip a milestone', () => {
   assert.equal(checkMilestones(getStats()).length, 0); // 210 < 250, nothing yet
   earnFeathers(50);                                     // 260 >= 250
   assert.equal(checkMilestones(getStats()).length, 1); // now it fires — kills "prize doesn't count"
+});
+
+test('tutorial-seen flag: absent is false, mark makes it true', () => {
+  resetStorage();
+  assert.equal(hasSeenTutorial(), false);
+  markTutorialSeen();
+  assert.equal(hasSeenTutorial(), true); // kills a "return false" / no-op mutation
 });
