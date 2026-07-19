@@ -23,7 +23,9 @@
 export const SETTINGS = Object.freeze([
   { key: 'haptics', label: 'Haptics', group: 'GAMEPLAY', def: true },
   { key: 'sound', label: 'Sound Effects', group: 'AUDIO', def: true },
-  { key: 'music', label: 'Music', group: 'AUDIO', def: true },
+  // Default OFF while the soundtrack is still being finished — the author will
+  // flip this back to true when Music is ready to ship on by default.
+  { key: 'music', label: 'Music', group: 'AUDIO', def: false },
   { key: 'altMusic', label: 'Alternate Music', group: 'AUDIO', def: false },
   { key: 'hints', label: 'Tutorial Hints', group: 'GAMEPLAY', def: true },
   { key: 'motion', label: 'Reduced Motion', group: 'GAMEPLAY', def: false },

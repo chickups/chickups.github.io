@@ -33,9 +33,9 @@ test('the defaults are the friendly ones', () => {
   // for anyone who asked the OS.
   assert.equal(settingAt('haptics')?.def, true);
   assert.equal(settingAt('sound')?.def, true);
-  // Music defaults ON (nothing is audible until the first tap unlocks audio
-  // anyway); Alternate Music defaults OFF — the primary recordings.
-  assert.equal(settingAt('music')?.def, true);
+  // Music defaults OFF for now — the soundtrack is still being finished, so it
+  // stays off until the author is ready. Alternate Music defaults OFF too.
+  assert.equal(settingAt('music')?.def, false);
   assert.equal(settingAt('altMusic')?.def, false);
   assert.equal(settingAt('hints')?.def, true);
   assert.equal(settingAt('motion')?.def, false);
